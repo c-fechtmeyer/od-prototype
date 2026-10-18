@@ -9,10 +9,6 @@ import type { LogScale } from "@/lib/scale";
 
 type Sort = { key: "rank" | MetricKey; dir: "asc" | "desc" };
 
-// Column titles, where the table's wording differs from the metric's own label.
-const COLUMN_LABEL: Partial<Record<MetricKey, string>> = { price: "Sale Prices" };
-const columnLabel = (key: MetricKey) => COLUMN_LABEL[key] ?? METRICS[key].label;
-
 const ROWS: { cur: WindowKey; prior: WindowKey; label: string; long: string }[] = [
   { cur: "c365", prior: "p365", label: "365D", long: "Last 365 days" },
   { cur: "c180", prior: "p180", label: "180D", long: "Last 180 days" },
@@ -115,7 +111,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
             onClick={() => setSort({ key: "rank", dir: "asc" })}
             className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 text-xs text-muted hover:text-fg"
           >
-            Sorted by {columnLabel(sort.key)} (365D)
+            Sorted by {METRICS[sort.key].label} (365D)
             <span aria-hidden="true">×</span>
             <span className="sr-only">Reset sort</span>
           </button>
@@ -139,7 +135,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
                 scope="col"
                 className="sticky left-0 z-10 border-b border-line bg-surface py-3 pr-4 font-medium sm:static sm:bg-transparent"
               >
-                Model family
+                Model Family
               </th>
               <th scope="col" className="w-16 border-b border-line py-3 font-medium">
                 Window
@@ -343,7 +339,7 @@ function MetricHeader({
       className={`border-b border-line py-3 align-bottom font-medium ${last ? "pr-5" : "pr-4"}`}
     >
       <SortButton active={active} dir={sort.dir} onClick={() => onSort(metric.key)} title={metric.help}>
-        {columnLabel(metric.key)}
+        {metric.label}
       </SortButton>
       {children}
     </th>

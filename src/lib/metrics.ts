@@ -28,7 +28,7 @@ export const METRICS: Record<MetricKey, Metric> = {
   },
   volume: {
     key: "volume",
-    label: "Dollar volume",
+    label: "Dollar Volume",
     help: "Total sale amount of sold auctions.",
     format: (s) => formatMoney(s.volume),
     sortValue: (s) => s.volume,
@@ -37,7 +37,7 @@ export const METRICS: Record<MetricKey, Metric> = {
   },
   price: {
     key: "price",
-    label: "Sale price P25–P75",
+    label: "Sale Prices",
     help: "Middle 50% of sale prices for sold auctions (reserve and no-reserve). YoY is the change in the median.",
     format: (s) => formatRange(s.p25, s.p75),
     sortValue: (s) => s.p50,
@@ -46,7 +46,7 @@ export const METRICS: Record<MetricKey, Metric> = {
   },
   success: {
     key: "success",
-    label: "Reserve success",
+    label: "Reserve Success",
     help: "Share of reserve auctions that sold, including sold-after deals. Canceled auctions are excluded. YoY is in percentage points.",
     format: (s) => formatPct(successRate(s)),
     sortValue: (s) => successRate(s),
