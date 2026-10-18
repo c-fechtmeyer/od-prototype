@@ -13,8 +13,7 @@ export type WindowStats = {
   p25: number | null; // sale-amount percentiles, sold auctions only
   p50: number | null;
   p75: number | null;
-  reserveAuctions: number; // reserve auctions that ran to the end (not canceled)
-  reserveSold: number; // of those, sold or sold after
+  noReserveAuctions: number; // listings offered with no reserve, canceled included
 };
 
 export type Market = {
@@ -58,8 +57,7 @@ const WINDOW_STATS = `
     percentile_cont(0.25) WITHIN GROUP (ORDER BY a.sale_amount) FILTER (WHERE a.is_sold) AS p25,
     percentile_cont(0.50) WITHIN GROUP (ORDER BY a.sale_amount) FILTER (WHERE a.is_sold) AS p50,
     percentile_cont(0.75) WITHIN GROUP (ORDER BY a.sale_amount) FILTER (WHERE a.is_sold) AS p75,
-    count(*) FILTER (WHERE NOT a.no_reserve AND a.status <> 'canceled')::int AS reserve_auctions,
-    count(*) FILTER (WHERE NOT a.no_reserve AND a.is_sold)::int AS reserve_sold`;
+    count(*) FILTER (WHERE a.no_reserve)::int AS no_reserve_auctions`;
 
 const MARKETS_SQL = `
 WITH ${WINDOWS_CTE}, fam AS (
@@ -93,7 +91,7 @@ WITH ${WINDOWS_CTE}, fam AS (
 )
 SELECT i.rank, i.make_key, i.model_family_key, i.make_name, i.family_name,
        i.generations, s.w, s.auctions, s.volume, s.p25, s.p50, s.p75,
-       s.reserve_auctions, s.reserve_sold
+       s.no_reserve_auctions
 FROM info i
 LEFT JOIN stats s USING (make_key, model_family_key)
 ORDER BY i.rank, s.w`;
@@ -114,8 +112,7 @@ type StatsRow = {
   p25: number | null;
   p50: number | null;
   p75: number | null;
-  reserve_auctions: number;
-  reserve_sold: number;
+  no_reserve_auctions: number;
 };
 
 const EMPTY_STATS: WindowStats = {
@@ -124,8 +121,7 @@ const EMPTY_STATS: WindowStats = {
   p25: null,
   p50: null,
   p75: null,
-  reserveAuctions: 0,
-  reserveSold: 0,
+  noReserveAuctions: 0,
 };
 
 function emptyWindows(): Record<WindowKey, WindowStats> {
@@ -139,8 +135,7 @@ function toStats(r: StatsRow): WindowStats {
     p25: r.p25,
     p50: r.p50,
     p75: r.p75,
-    reserveAuctions: r.reserve_auctions,
-    reserveSold: r.reserve_sold,
+    noReserveAuctions: r.no_reserve_auctions,
   };
 }
 

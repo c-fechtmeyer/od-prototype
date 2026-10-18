@@ -45,7 +45,7 @@ Every window is anchored at `now()`. **c365** and **c180** are the trailing 365 
 | Auctions | Every listing that ended in the window, canceled included |
 | Dollar Volume | Sum of `sale_amount` for sold auctions (`sold` + `sold_after`) |
 | Sale Prices | Interquartile range (P25–P75) of `sale_amount` for sold auctions, reserve and no-reserve. The YoY figure is the change in the median |
-| Reserve Success | `sold` + `sold_after` divided by reserve auctions that weren't canceled. The YoY figure is in percentage points |
+| No Reserve % | No-reserve auctions divided by total auctions (canceled included). The YoY figure is in percentage points |
 | Active Markets (summary tile) | Model families with at least one auction in the window |
 
 All of the SQL lives in `src/lib/markets.ts`. Metric formatting, deltas, and sort

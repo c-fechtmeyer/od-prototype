@@ -1,7 +1,7 @@
 import { formatCount, formatMoney, formatPct, formatRange, pctChange, ratio } from "./format";
 import type { WindowStats } from "./markets";
 
-export type MetricKey = "auctions" | "volume" | "price" | "success";
+export type MetricKey = "auctions" | "volume" | "price" | "noReserve";
 
 export type Metric = {
   key: MetricKey;
@@ -14,7 +14,7 @@ export type Metric = {
   deltaKind: "pct" | "pp";
 };
 
-export const successRate = (s: WindowStats) => ratio(s.reserveSold, s.reserveAuctions);
+export const noReserveShare = (s: WindowStats) => ratio(s.noReserveAuctions, s.auctions);
 
 export const METRICS: Record<MetricKey, Metric> = {
   auctions: {
@@ -44,15 +44,15 @@ export const METRICS: Record<MetricKey, Metric> = {
     delta: (c, p) => pctChange(c.p50, p.p50),
     deltaKind: "pct",
   },
-  success: {
-    key: "success",
-    label: "Reserve Success",
-    help: "Share of reserve auctions that sold, including sold-after deals. Canceled auctions are excluded. YoY is in percentage points.",
-    format: (s) => formatPct(successRate(s)),
-    sortValue: (s) => successRate(s),
+  noReserve: {
+    key: "noReserve",
+    label: "No Reserve %",
+    help: "Share of auctions offered with no reserve: no-reserve auctions ÷ total auctions (canceled included). YoY is in percentage points.",
+    format: (s) => formatPct(noReserveShare(s)),
+    sortValue: (s) => noReserveShare(s),
     delta: (c, p) => {
-      const cr = successRate(c);
-      const pr = successRate(p);
+      const cr = noReserveShare(c);
+      const pr = noReserveShare(p);
       return cr == null || pr == null ? null : cr - pr;
     },
     deltaKind: "pp",

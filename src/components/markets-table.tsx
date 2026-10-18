@@ -156,7 +156,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
                   <RangeAxis scale={scale} />
                 </div>
               </MetricHeader>
-              <MetricHeader metric={METRICS.success} sort={sort} onSort={toggleSort} last />
+              <MetricHeader metric={METRICS.noReserve} sort={sort} onSort={toggleSort} last />
             </tr>
           </thead>
           <tbody>
@@ -282,7 +282,7 @@ function MarketRow({
       <td className={`${cell} pr-5`}>
         <Stack>
           {ROWS.map((r) => (
-            <ValueLine key={r.label} metric={METRICS.success} market={m} row={r} valueWidth={52} />
+            <ValueLine key={r.label} metric={METRICS.noReserve} market={m} row={r} valueWidth={52} />
           ))}
         </Stack>
       </td>
@@ -304,7 +304,7 @@ function ValueLine({
   const cur = market.windows[row.cur];
   const prior = market.windows[row.prior];
   const extra =
-    metric.key === "success" ? ` (${cur.reserveSold} of ${cur.reserveAuctions} reserve auctions sold)` : "";
+    metric.key === "noReserve" ? ` (${cur.noReserveAuctions} of ${cur.auctions} auctions)` : "";
   return (
     <div
       className="flex items-center gap-3"
