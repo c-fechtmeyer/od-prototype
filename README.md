@@ -3,9 +3,10 @@
 A prototype UI over the Cars & Bids auction archive in Neon (the `carsandbids`
 schema, loaded daily by [auct-scrape-and-load](https://github.com/c-fechtmeyer/auct-scrape-and-load)).
 
-The homepage, **Markets**, ranks the 25 most-listed model families over the last
+The homepage, **Markets**, ranks the 10 most-listed model families over the last
 365 days. Each row shows the last 365 and 180 days, each with a YoY comp against
-the same span one year earlier.
+the same span one year earlier. **See All Markets** links to `/markets`, which is a
+placeholder for now. **About** (`/about`) holds the data source and archive status.
 
 ## Stack
 

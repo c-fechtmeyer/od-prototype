@@ -4,15 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV = [
-  { href: "/", label: "Markets" },
-  { href: "/about", label: "About" },
+  { href: "/", label: "Markets", match: (p: string) => p === "/" || p.startsWith("/markets") },
+  { href: "/about", label: "About", match: (p: string) => p.startsWith("/about") },
 ];
 
 export function NavLinks({ pathname }: { pathname?: string }) {
   return (
     <nav className="flex h-full items-center gap-6 text-sm">
       {NAV.map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname?.startsWith(item.href);
+        const active = pathname != null && item.match(pathname);
         return (
           <Link
             key={item.href}

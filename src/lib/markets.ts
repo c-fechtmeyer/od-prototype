@@ -29,9 +29,13 @@ export type Market = {
 };
 
 export type MarketSummary = {
+  windows: Record<WindowKey, WindowStats>;
+};
+
+export type ArchiveStatus = {
   totalAuctions: number;
   latestAuctionEnd: number; // epoch ms
-  windows: Record<WindowKey, WindowStats>;
+  fresh: boolean; // an auction ended in the last 2 days, so the daily load is running
 };
 
 // Every window's stats are computed in one pass. The windows are anchored at now(),
@@ -66,7 +70,7 @@ WITH ${WINDOWS_CTE}, fam AS (
     WHERE auction_end >= now() - interval '365 days'
     GROUP BY make_key, model_family_key
     ORDER BY rank
-    LIMIT 25
+    LIMIT $1
 ), info AS (
     SELECT r.rank, r.make_key, r.model_family_key, mk.make_name,
            min(m.model_family_name) AS family_name,
@@ -92,10 +96,7 @@ ORDER BY i.rank, s.w`;
 
 const SUMMARY_SQL = `
 WITH ${WINDOWS_CTE}
-SELECT w.w, ${WINDOW_STATS},
-       (SELECT count(*)::int FROM carsandbids.auctions) AS total_auctions,
-       (SELECT (extract(epoch FROM max(auction_end)) * 1000)::float8
-        FROM carsandbids.auctions) AS latest_auction_end
+SELECT w.w, ${WINDOW_STATS}
 FROM win w
 LEFT JOIN carsandbids.auctions a ON a.auction_end >= w.lo AND a.auction_end < w.hi
 GROUP BY w.w`;
@@ -146,15 +147,17 @@ type MarketRow = StatsRow & {
   generations: string[];
 };
 
-export async function getMarkets(): Promise<{ markets: Market[]; summary: MarketSummary }> {
+// The top `limit` model families by listings over the trailing 365 days, plus the
+// same stats for all of Cars & Bids.
+export async function getMarkets(limit: number): Promise<{ markets: Market[]; summary: MarketSummary }> {
   "use cache";
   // The loader runs once a day; hourly keeps a fresh load visible soon after it lands.
   cacheLife("hours");
 
   const [marketRows, summaryRows] = (await Promise.all([
-    sql.query(MARKETS_SQL),
+    sql.query(MARKETS_SQL, [limit]),
     sql.query(SUMMARY_SQL),
-  ])) as [MarketRow[], (StatsRow & { total_auctions: number; latest_auction_end: number })[]];
+  ])) as [MarketRow[], StatsRow[]];
 
   const byRank = new Map<number, Market>();
   for (const r of marketRows) {
@@ -175,12 +178,21 @@ export async function getMarkets(): Promise<{ markets: Market[]; summary: Market
     if (r.w) m.windows[r.w] = toStats(r);
   }
 
-  const summary: MarketSummary = {
-    totalAuctions: summaryRows[0]?.total_auctions ?? 0,
-    latestAuctionEnd: summaryRows[0]?.latest_auction_end ?? 0,
-    windows: emptyWindows(),
-  };
+  const summary: MarketSummary = { windows: emptyWindows() };
   for (const r of summaryRows) if (r.w) summary.windows[r.w] = toStats(r);
 
   return { markets: [...byRank.values()].sort((a, b) => a.rank - b.rank), summary };
+}
+
+export async function getArchiveStatus(): Promise<ArchiveStatus> {
+  "use cache";
+  cacheLife("hours");
+
+  const [row] = (await sql.query(`
+    SELECT count(*)::int AS total_auctions,
+           (extract(epoch FROM max(auction_end)) * 1000)::float8 AS latest_auction_end,
+           coalesce(max(auction_end) >= now() - interval '2 days', false) AS fresh
+    FROM carsandbids.auctions`)) as { total_auctions: number; latest_auction_end: number; fresh: boolean }[];
+
+  return { totalAuctions: row.total_auctions, latestAuctionEnd: row.latest_auction_end, fresh: row.fresh };
 }
