@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { MarketsTable } from "@/components/markets-table";
 import { SummaryTiles } from "@/components/summary-tiles";
-import { getMarkets } from "@/lib/markets";
+import { getMarkets, getMarketSummary } from "@/lib/markets";
 import { logScale } from "@/lib/scale";
 
 const TOP_N = 10;
 
 export default async function HomePage() {
-  const { markets, summary } = await getMarkets(TOP_N);
+  const [markets, summary] = await Promise.all([getMarkets(TOP_N), getMarketSummary()]);
 
   const scale = logScale(
     markets.flatMap((m) => Object.values(m.windows).flatMap((w) => [w.p25 ?? NaN, w.p75 ?? NaN])),

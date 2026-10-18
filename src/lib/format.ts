@@ -1,5 +1,8 @@
 // Pure display helpers, shared by server and client components.
 
+// Shown wherever a metric or comparison can't be computed (no sales, no year-ago base).
+export const INSUFFICIENT = "Insufficient Data";
+
 export function formatCount(n: number): string {
   return n.toLocaleString("en-US");
 }
@@ -17,12 +20,12 @@ export function formatMoney(n: number | null): string {
 }
 
 export function formatRange(lo: number | null, hi: number | null): string {
-  if (lo == null || hi == null) return "—";
+  if (lo == null || hi == null) return INSUFFICIENT;
   return `${formatMoney(lo)}–${formatMoney(hi).slice(1)}`;
 }
 
 export function formatPct(r: number | null, digits = 1): string {
-  return r == null ? "—" : `${(r * 100).toFixed(digits)}%`;
+  return r == null ? INSUFFICIENT : `${(r * 100).toFixed(digits)}%`;
 }
 
 // Relative change, cur vs prior; null when there's no prior base to compare to.

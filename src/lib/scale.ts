@@ -7,11 +7,14 @@ export type LogScale = { lo: number; hi: number; ticks: number[] };
 // Half-decade steps keep tick labels evenly spaced on a log axis.
 const TICK_STEPS = [1e3, 3e3, 1e4, 3e4, 1e5, 3e5, 1e6, 3e6];
 
-export function logScale(values: number[]): LogScale {
-  const finite = values.filter((v) => Number.isFinite(v) && v > 0);
+// `trim` drops that fraction of values at each end before sizing the domain; bands
+// outside it are clamped to the track edge (scalePos clamps).
+export function logScale(values: number[], { trim = 0 }: { trim?: number } = {}): LogScale {
+  const finite = values.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
   if (!finite.length) return { lo: 1e4, hi: 1e5, ticks: [1e4, 3e4, 1e5] };
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
+  const cut = Math.floor(finite.length * trim);
+  const min = finite[cut];
+  const max = finite[finite.length - 1 - cut];
   // Pad by ~12% in log space so the end bands don't touch the track edge.
   const pad = (Math.log10(max) - Math.log10(min)) * 0.06 || 0.1;
   const lo = 10 ** (Math.log10(min) - pad);

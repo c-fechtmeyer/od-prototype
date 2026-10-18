@@ -5,8 +5,12 @@ schema, loaded daily by [auct-scrape-and-load](https://github.com/c-fechtmeyer/a
 
 The homepage, **Home** ("OverDrive Market Intelligence"), ranks the 10 most-listed model families over the last
 365 days. Each row shows the last 365 and 180 days, each with a YoY comp against
-the same span one year earlier. **See All Markets** links to `/markets`, which is a
-placeholder for now. **About** (`/about`) holds the data source and archive status.
+the same span one year earlier. **See All Markets** links to the **Markets** tab
+(`/markets`): every model family with any auction history, one compact row each,
+with a 365D / 180D toggle (it changes the figures shown, not the ranking) and
+25 / 50 / 100 rows per page. Any value or YoY
+comparison that can't be computed reads "Insufficient Data". **About** (`/about`)
+holds the data source and archive status.
 
 ## Stack
 
@@ -47,6 +51,7 @@ Every window is anchored at `now()`. **c365** and **c180** are the trailing 365 
 | Sale Prices | Interquartile range (P25–P75) of `sale_amount` for sold auctions, reserve and no-reserve. The YoY figure is the change in the median |
 | No Reserve % | No-reserve auctions divided by total auctions (canceled included). The YoY figure is in percentage points |
 | Active Markets (summary tile) | Model families with at least one auction in the window |
+| Models Tracked (Markets tab) | Model families with at least one observed auction, all time. "New" counts families whose first auction ended in the last 365 days |
 
 All of the SQL lives in `src/lib/markets.ts`. Metric formatting, deltas, and sort
 keys live in `src/lib/metrics.ts`.
