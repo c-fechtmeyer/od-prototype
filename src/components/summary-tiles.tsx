@@ -1,4 +1,5 @@
 import { Delta } from "@/components/delta";
+import { InfoTip } from "@/components/info-tip";
 import { formatCount, pctChange } from "@/lib/format";
 import type { MarketSummary, SummaryStats } from "@/lib/markets";
 import { METRICS } from "@/lib/metrics";
@@ -6,20 +7,31 @@ import { METRICS } from "@/lib/metrics";
 type Tile = {
   key: string;
   label: string;
-  help: string;
+  definition: string;
   format: (s: SummaryStats) => string;
   delta: (cur: SummaryStats, prior: SummaryStats) => number | null;
   deltaKind: "pct" | "pp";
 };
 
+// Each tile covers every Cars & Bids auction, not just the families in the table.
 const TILES: Tile[] = [
-  METRICS.auctions,
-  METRICS.volume,
-  METRICS.price,
+  {
+    ...METRICS.auctions,
+    definition: "Every Cars & Bids listing that ended in the window, including canceled auctions.",
+  },
+  {
+    ...METRICS.volume,
+    definition: "Total sale amount of auctions that sold in the window, including sold-after deals.",
+  },
+  {
+    ...METRICS.price,
+    definition:
+      "The middle 50% of sale prices: 25th to 75th percentile of sold auctions, reserve and no-reserve. YoY is the change in the median sale price.",
+  },
   {
     key: "active",
     label: "Active Markets",
-    help: "Model families with at least one auction in the window.",
+    definition: "Model families with at least one auction that ended in the window.",
     format: (s) => formatCount(s.activeMarkets),
     delta: (c, p) => pctChange(c.activeMarkets, p.activeMarkets),
     deltaKind: "pct",
@@ -32,9 +44,21 @@ export function SummaryTiles({ summary }: { summary: MarketSummary }) {
   return (
     <section aria-label="All Cars & Bids auctions" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {TILES.map((m) => (
-        <div key={m.key} className="rounded-xl border border-line bg-surface/80 px-4 py-3.5" title={m.help}>
+        <div key={m.key} className="relative rounded-xl border border-line bg-surface/80 px-4 py-3.5">
           <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-medium text-muted">
-            {m.label}
+            {/* The icon is glued to the label's last word, so a wrapped label never leaves it alone on a line. */}
+            <span>
+              {m.label.slice(0, m.label.lastIndexOf(" ") + 1)}
+              <span className="whitespace-nowrap">
+                {m.label.slice(m.label.lastIndexOf(" ") + 1)}
+                <InfoTip id={`tile-def-${m.key}`} label={m.label} className="ml-1.5 align-[-3px]">
+                  {m.definition}
+                  <span className="mt-1.5 block text-faint">
+                    365D and 180D are the last 365 and 180 days. YoY compares each with the same span a year earlier.
+                  </span>
+                </InfoTip>
+              </span>
+            </span>
             <span className="hidden text-[10px] tracking-wide whitespace-nowrap text-faint sm:inline">365D · YoY</span>
           </div>
           <div className="flex flex-wrap items-baseline gap-x-2.5">
