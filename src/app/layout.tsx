@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Markets · OD",
+  title: "OverDrive Market Intelligence",
   description: "Collector-car auction markets, built on Cars & Bids results.",
 };
 
