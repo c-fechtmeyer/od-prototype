@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-const NAV = [{ href: "/", label: "Markets" }];
+import { Suspense } from "react";
+import { ActiveNavLinks, NavLinks } from "@/components/nav-links";
 
 export function SiteHeader() {
   return (
@@ -23,23 +23,10 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="flex h-full items-center gap-6 text-sm">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current="page"
-              className="relative flex h-full items-center font-medium text-forest-300 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-forest-400"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="ml-auto hidden items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs text-muted sm:flex">
-          <span className="size-1.5 rounded-full bg-forest-400" aria-hidden="true" />
-          Source: Cars &amp; Bids
-        </div>
+        {/* The active link needs the pathname, which a future dynamic route may not know at prerender. */}
+        <Suspense fallback={<NavLinks />}>
+          <ActiveNavLinks />
+        </Suspense>
       </div>
     </header>
   );

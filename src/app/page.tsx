@@ -1,5 +1,4 @@
 import { MarketsTable } from "@/components/markets-table";
-import { SiteHeader } from "@/components/site-header";
 import { StatusBar } from "@/components/status-bar";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { formatPct, ratio } from "@/lib/format";
@@ -19,7 +18,6 @@ export default async function MarketsPage() {
 
   return (
     <>
-      <SiteHeader />
       <main className="mx-auto w-full max-w-[1480px] flex-1 px-4 pb-16 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2 pt-9 pb-6">
           <div>

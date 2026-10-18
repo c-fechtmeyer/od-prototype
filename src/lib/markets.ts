@@ -25,8 +25,6 @@ export type Market = {
   makeName: string;
   familyName: string;
   generations: string[];
-  modelCount: number;
-  bodyStyle: string | null; // most common body style over the trailing 365 days
   windows: Record<WindowKey, WindowStats>;
 };
 
@@ -73,24 +71,21 @@ WITH ${WINDOWS_CTE}, fam AS (
     SELECT r.rank, r.make_key, r.model_family_key, mk.make_name,
            min(m.model_family_name) AS family_name,
            coalesce(array_agg(m.model_generation ORDER BY m.model_generation)
-                    FILTER (WHERE m.model_generation IS NOT NULL), '{}') AS generations,
-           count(*)::int AS model_count
+                    FILTER (WHERE m.model_generation IS NOT NULL), '{}') AS generations
     FROM ranked r
     JOIN carsandbids.makes mk USING (make_key)
     JOIN carsandbids.models m USING (make_key, model_family_key)
     GROUP BY r.rank, r.make_key, r.model_family_key, mk.make_name
 ), stats AS (
-    SELECT a.make_key, a.model_family_key, w.w, ${WINDOW_STATS},
-           mode() WITHIN GROUP (ORDER BY bs.body_style_name) AS body_style
+    SELECT a.make_key, a.model_family_key, w.w, ${WINDOW_STATS}
     FROM fam a
     JOIN ranked USING (make_key, model_family_key)
     JOIN win w ON a.auction_end >= w.lo AND a.auction_end < w.hi
-    LEFT JOIN carsandbids.body_styles bs ON bs.body_style_id = a.body_style
     GROUP BY a.make_key, a.model_family_key, w.w
 )
 SELECT i.rank, i.make_key, i.model_family_key, i.make_name, i.family_name,
-       i.generations, i.model_count, s.w, s.auctions, s.volume, s.p25, s.p50, s.p75,
-       s.reserve_auctions, s.reserve_sold, s.body_style
+       i.generations, s.w, s.auctions, s.volume, s.p25, s.p50, s.p75,
+       s.reserve_auctions, s.reserve_sold
 FROM info i
 LEFT JOIN stats s USING (make_key, model_family_key)
 ORDER BY i.rank, s.w`;
@@ -149,8 +144,6 @@ type MarketRow = StatsRow & {
   make_name: string;
   family_name: string;
   generations: string[];
-  model_count: number;
-  body_style: string | null;
 };
 
 export async function getMarkets(): Promise<{ markets: Market[]; summary: MarketSummary }> {
@@ -175,14 +168,11 @@ export async function getMarkets(): Promise<{ markets: Market[]; summary: Market
         makeName: r.make_name,
         familyName: r.family_name,
         generations: r.generations,
-        modelCount: r.model_count,
-        bodyStyle: null,
         windows: emptyWindows(),
       };
       byRank.set(r.rank, m);
     }
     if (r.w) m.windows[r.w] = toStats(r);
-    if (r.w === "c365") m.bodyStyle = r.body_style;
   }
 
   const summary: MarketSummary = {

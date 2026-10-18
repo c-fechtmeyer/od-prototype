@@ -9,6 +9,10 @@ import type { LogScale } from "@/lib/scale";
 
 type Sort = { key: "rank" | MetricKey; dir: "asc" | "desc" };
 
+// Column titles, where the table's wording differs from the metric's own label.
+const COLUMN_LABEL: Partial<Record<MetricKey, string>> = { price: "Sale Prices" };
+const columnLabel = (key: MetricKey) => COLUMN_LABEL[key] ?? METRICS[key].label;
+
 const ROWS: { cur: WindowKey; prior: WindowKey; label: string; long: string }[] = [
   { cur: "c365", prior: "p365", label: "365D", long: "Last 365 days" },
   { cur: "c180", prior: "p180", label: "180D", long: "Last 180 days" },
@@ -39,7 +43,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
     const filtered = markets.filter((m) => {
       if (watchOnly && !watchlist.set.has(m.familyId)) return false;
       if (!q) return true;
-      return [m.makeName, m.familyName, m.bodyStyle ?? "", ...m.generations].join(" ").toLowerCase().includes(q);
+      return [m.makeName, m.familyName, ...m.generations].join(" ").toLowerCase().includes(q);
     });
     if (sort.key === "rank") return sort.dir === "asc" ? filtered : [...filtered].reverse();
     const metric = METRICS[sort.key];
@@ -111,7 +115,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
             onClick={() => setSort({ key: "rank", dir: "asc" })}
             className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 text-xs text-muted hover:text-fg"
           >
-            Sorted by {METRICS[sort.key].label} (365D)
+            Sorted by {columnLabel(sort.key)} (365D)
             <span aria-hidden="true">×</span>
             <span className="sr-only">Reset sort</span>
           </button>
@@ -143,11 +147,16 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
               <MetricHeader metric={METRICS.auctions} sort={sort} onSort={toggleSort} />
               <MetricHeader metric={METRICS.volume} sort={sort} onSort={toggleSort} />
               <MetricHeader metric={METRICS.price} sort={sort} onSort={toggleSort}>
-                <div className="mt-2 flex items-center gap-3">
-                  <span className="w-[92px] text-[10px] font-normal text-faint">
-                    <Swatch className="h-[6px] bg-chart-current" /> now{" "}
-                    <Swatch className="ml-1.5 h-[3px] bg-chart-prior" /> yr ago
-                  </span>
+                {/* Legend and axis sit over the bars: offset by the price text column (92px) + gap. */}
+                <div className="mt-2 ml-[104px] space-y-1.5">
+                  <div className="flex items-center gap-3 text-[10px] font-normal text-faint">
+                    <span className="inline-flex items-center gap-1">
+                      <Swatch className="h-[6px] bg-chart-current" /> Now
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Swatch className="h-[3px] bg-chart-prior" /> Yr Ago
+                    </span>
+                  </div>
                   <RangeAxis scale={scale} />
                 </div>
               </MetricHeader>
@@ -198,12 +207,6 @@ function MarketRow({
 }) {
   const bg = striped ? "bg-surface-2" : "bg-surface";
   const cell = `border-b border-line/60 py-3 align-middle ${bg} group-hover:bg-surface-3`;
-  const detail =
-    m.generations.length > 0
-      ? `${m.generations.length} generation${m.generations.length > 1 ? "s" : ""}`
-      : m.modelCount > 1
-        ? `${m.modelCount} models`
-        : null;
 
   return (
     <tr className="group">
@@ -235,12 +238,11 @@ function MarketRow({
               <span className="text-[15px] font-semibold text-fg">{m.familyName}</span>
               <span className="text-[13px] text-muted">{m.makeName}</span>
             </div>
-            <div
-              className="mt-0.5 text-xs whitespace-nowrap text-faint"
-              title={m.generations.length ? `Generations: ${m.generations.join(", ")}` : undefined}
-            >
-              {[m.bodyStyle, detail].filter(Boolean).join(" · ")}
-            </div>
+            {m.generations.length > 0 && (
+              <div className="mt-0.5 text-xs whitespace-nowrap text-faint" title={m.generations.join(", ")}>
+                {m.generations.length} generation{m.generations.length > 1 ? "s" : ""}
+              </div>
+            )}
           </div>
         </div>
       </th>
@@ -341,7 +343,7 @@ function MetricHeader({
       className={`border-b border-line py-3 align-bottom font-medium ${last ? "pr-5" : "pr-4"}`}
     >
       <SortButton active={active} dir={sort.dir} onClick={() => onSort(metric.key)} title={metric.help}>
-        {metric.label}
+        {columnLabel(metric.key)}
       </SortButton>
       {children}
     </th>
