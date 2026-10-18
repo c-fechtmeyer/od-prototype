@@ -24,6 +24,7 @@ export type Market = {
   makeName: string;
   familyName: string;
   generations: string[];
+  isNew: boolean; // first observed auction ended in the last 365 days
   windows: Record<WindowKey, WindowStats>;
 };
 
@@ -66,22 +67,28 @@ WITH ${WINDOWS_CTE}, fam AS (
     JOIN carsandbids.models m USING (make_key, model_key)
     WHERE a.auction_end >= now() - interval '730 days'
 ), ranked AS (
-    SELECT make_key, model_family_key,
-           row_number() OVER (ORDER BY count(*) DESC, make_key, model_family_key)::int AS rank
-    FROM fam
-    WHERE auction_end >= now() - interval '365 days'
-    GROUP BY make_key, model_family_key
+    -- Every family with any auction history: by trailing-365-day listings, then all-time
+    -- listings, so families with nothing recent still get a stable place at the end.
+    -- LIMIT NULL (no limit) returns them all.
+    SELECT a.make_key, m.model_family_key,
+           row_number() OVER (
+               ORDER BY count(*) FILTER (WHERE a.auction_end >= now() - interval '365 days') DESC,
+                        count(*) DESC, a.make_key, m.model_family_key)::int AS rank,
+           min(a.auction_end) >= now() - interval '365 days' AS is_new
+    FROM carsandbids.auctions a
+    JOIN carsandbids.models m USING (make_key, model_key)
+    GROUP BY a.make_key, m.model_family_key
     ORDER BY rank
     LIMIT $1
 ), info AS (
-    SELECT r.rank, r.make_key, r.model_family_key, mk.make_name,
+    SELECT r.rank, r.make_key, r.model_family_key, r.is_new, mk.make_name,
            min(m.model_family_name) AS family_name,
            coalesce(array_agg(m.model_generation ORDER BY m.model_generation)
                     FILTER (WHERE m.model_generation IS NOT NULL), '{}') AS generations
     FROM ranked r
     JOIN carsandbids.makes mk USING (make_key)
     JOIN carsandbids.models m USING (make_key, model_family_key)
-    GROUP BY r.rank, r.make_key, r.model_family_key, mk.make_name
+    GROUP BY r.rank, r.make_key, r.model_family_key, r.is_new, mk.make_name
 ), stats AS (
     SELECT a.make_key, a.model_family_key, w.w, ${WINDOW_STATS}
     FROM fam a
@@ -90,7 +97,7 @@ WITH ${WINDOWS_CTE}, fam AS (
     GROUP BY a.make_key, a.model_family_key, w.w
 )
 SELECT i.rank, i.make_key, i.model_family_key, i.make_name, i.family_name,
-       i.generations, s.w, s.auctions, s.volume, s.p25, s.p50, s.p75,
+       i.generations, i.is_new, s.w, s.auctions, s.volume, s.p25, s.p50, s.p75,
        s.no_reserve_auctions
 FROM info i
 LEFT JOIN stats s USING (make_key, model_family_key)
@@ -146,19 +153,17 @@ type MarketRow = StatsRow & {
   make_name: string;
   family_name: string;
   generations: string[];
+  is_new: boolean;
 };
 
-// The top `limit` model families by listings over the trailing 365 days, plus the
-// same stats for all of Cars & Bids.
-export async function getMarkets(limit: number): Promise<{ markets: Market[]; summary: MarketSummary }> {
+// The top `limit` model families (null: every family with any auction history),
+// ranked by listings over the trailing 365 days.
+export async function getMarkets(limit: number | null): Promise<Market[]> {
   "use cache";
   // The loader runs once a day; hourly keeps a fresh load visible soon after it lands.
   cacheLife("hours");
 
-  const [marketRows, summaryRows] = (await Promise.all([
-    sql.query(MARKETS_SQL, [limit]),
-    sql.query(SUMMARY_SQL),
-  ])) as [MarketRow[], (StatsRow & { active_markets: number })[]];
+  const marketRows = (await sql.query(MARKETS_SQL, [limit])) as MarketRow[];
 
   const byRank = new Map<number, Market>();
   for (const r of marketRows) {
@@ -172,6 +177,7 @@ export async function getMarkets(limit: number): Promise<{ markets: Market[]; su
         makeName: r.make_name,
         familyName: r.family_name,
         generations: r.generations,
+        isNew: r.is_new,
         windows: emptyWindows(),
       };
       byRank.set(r.rank, m);
@@ -179,6 +185,15 @@ export async function getMarkets(limit: number): Promise<{ markets: Market[]; su
     if (r.w) m.windows[r.w] = toStats(r);
   }
 
+  return [...byRank.values()].sort((a, b) => a.rank - b.rank);
+}
+
+// The same window stats for all of Cars & Bids, plus the active-market count.
+export async function getMarketSummary(): Promise<MarketSummary> {
+  "use cache";
+  cacheLife("hours");
+
+  const summaryRows = (await sql.query(SUMMARY_SQL)) as (StatsRow & { active_markets: number })[];
   const summary: MarketSummary = {
     windows: {
       c365: { ...EMPTY_STATS, activeMarkets: 0 },
@@ -188,8 +203,7 @@ export async function getMarkets(limit: number): Promise<{ markets: Market[]; su
     },
   };
   for (const r of summaryRows) if (r.w) summary.windows[r.w] = { ...toStats(r), activeMarkets: r.active_markets };
-
-  return { markets: [...byRank.values()].sort((a, b) => a.rank - b.rank), summary };
+  return summary;
 }
 
 export async function getArchiveStatus(): Promise<ArchiveStatus> {

@@ -1,3 +1,5 @@
+import { INSUFFICIENT } from "@/lib/format";
+
 // A YoY change: arrow + signed magnitude. Color reinforces the arrow, never replaces it.
 export function Delta({
   value,
@@ -10,9 +12,7 @@ export function Delta({
 }) {
   if (value == null) {
     return (
-      <span className={`text-faint ${className}`} aria-label="no year-ago comparison">
-        —
-      </span>
+      <span className={`whitespace-nowrap text-faint ${className}`}>{INSUFFICIENT}</span>
     );
   }
   const pct = Math.abs(value * 100);
