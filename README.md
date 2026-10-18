@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# od-prototype
 
-## Getting Started
+A prototype UI over the Cars & Bids auction archive in Neon (the `carsandbids`
+schema, loaded daily by [auct-scrape-and-load](https://github.com/c-fechtmeyer/auct-scrape-and-load)).
 
-First, run the development server:
+The homepage, **Markets**, ranks the 25 most-listed model families over the last
+365 days. Each row shows the last 365 and 180 days, each with a YoY comp against
+the same span one year earlier.
+
+## Stack
+
+- **Next.js 16** (App Router, Cache Components) + **Tailwind CSS v4**
+- **@neondatabase/serverless** (HTTP driver) for read-only queries
+- Deploys to **Vercel** as is
+
+## Run locally
+
+Requires Node 20.9+ (`.nvmrc` pins 22).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # then set DATABASE_URL
+npm install
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Deploy (Vercel)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Push this repo to GitHub and import it in Vercel.
+2. Add `DATABASE_URL` under Project → Settings → Environment Variables. You can also
+   connect it through Vercel's Neon integration. It's needed at build time too,
+   because the page is prerendered.
+3. Deploy. The page is static and revalidates hourly (`cacheLife("hours")` in
+   `src/lib/markets.ts`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Metric definitions
 
-## Learn More
+Every window is anchored at `now()`. **c365** and **c180** are the trailing 365 and
+180 days. Their comps, **p365** and **p180**, are the same spans one year earlier
+(p180 is days 365–545 ago).
 
-To learn more about Next.js, take a look at the following resources:
+| Metric | Definition |
+|---|---|
+| Ranking | Listings per model family (make + `model_family_name`) over the trailing 365 days |
+| Auctions | Every listing that ended in the window, canceled included |
+| Dollar volume | Sum of `sale_amount` for sold auctions (`sold` + `sold_after`) |
+| Sale price P25–P75 | Interquartile range of `sale_amount` for sold auctions, reserve and no-reserve. The YoY figure is the change in the median |
+| Reserve success | `sold` + `sold_after` divided by reserve auctions that weren't canceled. The YoY figure is in percentage points |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+All of the SQL lives in `src/lib/markets.ts`. Metric formatting, deltas, and sort
+keys live in `src/lib/metrics.ts`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Customizing
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Colors:** every color is a token in `src/app/globals.css` (`@theme`). Text
+  tokens hold ≥ 4.5:1 contrast on every surface.
+- **Metrics / columns:** add an entry to `METRICS` in `src/lib/metrics.ts`. Add
+  any new column to the `WINDOW_STATS` SQL in `src/lib/markets.ts`.
+- **Watchlist:** stored per browser in `localStorage` (`od.watchlist`) until
+  accounts exist.

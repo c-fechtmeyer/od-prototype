@@ -1,26 +1,55 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Forest palette. Every color in the UI comes from these tokens, so re-theming is
+   a matter of editing this block. Text tokens hold >= 4.5:1 on every surface. */
+@theme {
+  --color-canvas: #050d09;
+  --color-surface: #0a1711;
+  --color-surface-2: #0d1d15;
+  --color-surface-3: #12261c;
+  --color-line: #1a3227;
+  --color-line-strong: #25463a;
+
+  --color-fg: #e3ede7;
+  --color-muted: #8fa699;
+  --color-faint: #7a9486;
+
+  --color-forest-200: #b9ecca;
+  --color-forest-300: #8fdcae;
+  --color-forest-400: #5cc48a;
+  --color-forest-500: #3fa66b;
+  --color-forest-600: #2f8a57;
+  --color-forest-700: #1d5e3c;
+  --color-forest-800: #143f2a;
+  --color-forest-900: #0c2a1c;
+
+  /* YoY deltas: always paired with an arrow and a sign, never color alone. */
+  --color-up: #6fd39b;
+  --color-down: #f2836f;
+
+  /* Range bars: the current window is the emphasized series, the year-ago comp is context. */
+  --color-chart-current: #41a96d;
+  --color-chart-prior: #5c6e64;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(1200px 520px at 12% -8%, rgb(47 138 87 / 0.18), transparent 60%),
+    radial-gradient(900px 420px at 95% -12%, rgb(29 94 60 / 0.16), transparent 60%);
+  background-repeat: no-repeat;
+  color: var(--color-fg);
+}
+
+::selection {
+  background: rgb(63 166 107 / 0.35);
 }
