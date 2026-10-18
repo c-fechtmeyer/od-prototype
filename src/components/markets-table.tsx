@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Delta } from "@/components/delta";
 import { RangeAxis, RangeBar } from "@/components/range-bar";
 import type { Market, WindowKey } from "@/lib/markets";
@@ -17,8 +17,6 @@ const ROWS: { cur: WindowKey; prior: WindowKey; label: string; long: string }[] 
 export function MarketsTable({ markets, scale }: { markets: Market[]; scale: LogScale }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "rank", dir: "asc" });
-  const [watchOnly, setWatchOnly] = useState(false);
-  const watchlist = useWatchlist();
   const searchRef = useRef<HTMLInputElement>(null);
 
   // "/" focuses search, like the screenshot's search box; Escape clears it.
@@ -36,11 +34,9 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = markets.filter((m) => {
-      if (watchOnly && !watchlist.set.has(m.familyId)) return false;
-      if (!q) return true;
-      return [m.makeName, m.familyName, ...m.generations].join(" ").toLowerCase().includes(q);
-    });
+    const filtered = q
+      ? markets.filter((m) => [m.makeName, m.familyName, ...m.generations].join(" ").toLowerCase().includes(q))
+      : markets;
     if (sort.key === "rank") return sort.dir === "asc" ? filtered : [...filtered].reverse();
     const metric = METRICS[sort.key];
     return [...filtered].sort((a, b) => {
@@ -50,7 +46,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
       if (bv == null) return -1;
       return sort.dir === "asc" ? av - bv : bv - av;
     });
-  }, [markets, query, sort, watchOnly, watchlist.set]);
+  }, [markets, query, sort]);
 
   const toggleSort = (key: Sort["key"]) =>
     setSort((s) => {
@@ -85,26 +81,6 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
           <kbd className="rounded border border-line-strong px-1.5 font-mono text-[11px] text-faint">/</kbd>
         </label>
 
-        <button
-          type="button"
-          role="switch"
-          aria-checked={watchOnly}
-          onClick={() => setWatchOnly((v) => !v)}
-          className="flex h-10 items-center gap-2.5 rounded-lg px-1 text-sm font-medium text-fg"
-        >
-          <span
-            className={`relative h-5 w-9 rounded-full transition-colors ${watchOnly ? "bg-forest-500" : "bg-surface-3"}`}
-          >
-            <span
-              className={`absolute top-0.5 size-4 rounded-full bg-fg shadow transition-transform ${watchOnly ? "translate-x-[18px]" : "translate-x-0.5"}`}
-            />
-          </span>
-          Watchlist only
-          {watchlist.size > 0 && (
-            <span className="rounded bg-forest-900 px-1.5 text-xs text-forest-300 tabular-nums">{watchlist.size}</span>
-          )}
-        </button>
-
         {sort.key !== "rank" && (
           <button
             type="button"
@@ -123,10 +99,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
         <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-sm">
           <thead>
             <tr className="text-left text-[13px] text-muted">
-              <th scope="col" className="w-12 border-b border-line py-3 pl-4">
-                <span className="sr-only">Watch</span>
-              </th>
-              <th scope="col" className="w-10 border-b border-line py-3 font-medium">
+              <th scope="col" className="w-14 border-b border-line py-3 pl-5 font-medium">
                 <SortButton active={sort.key === "rank"} dir={sort.dir} onClick={() => toggleSort("rank")}>
                   #
                 </SortButton>
@@ -161,23 +134,12 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
           </thead>
           <tbody>
             {rows.map((m, i) => (
-              <MarketRow
-                key={m.familyId}
-                market={m}
-                scale={scale}
-                striped={i % 2 === 1}
-                watched={watchlist.has(m.familyId)}
-                onToggleWatch={() => watchlist.toggle(m.familyId)}
-              />
+              <MarketRow key={m.familyId} market={m} scale={scale} striped={i % 2 === 1} />
             ))}
           </tbody>
         </table>
         {rows.length === 0 && (
-          <p className="px-6 py-14 text-center text-sm text-muted">
-            {watchOnly && watchlist.size === 0
-              ? "Your watchlist is empty. Tap the heart on a row to add it."
-              : `No markets match “${query}”.`}
-          </p>
+          <p className="px-6 py-14 text-center text-sm text-muted">No markets match “{query}”.</p>
         )}
       </div>
       <p className="mt-3 text-xs text-faint">
@@ -188,44 +150,13 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
   );
 }
 
-function MarketRow({
-  market: m,
-  scale,
-  striped,
-  watched,
-  onToggleWatch,
-}: {
-  market: Market;
-  scale: LogScale;
-  striped: boolean;
-  watched: boolean;
-  onToggleWatch: () => void;
-}) {
+function MarketRow({ market: m, scale, striped }: { market: Market; scale: LogScale; striped: boolean }) {
   const bg = striped ? "bg-surface-2" : "bg-surface";
   const cell = `border-b border-line/60 py-3 align-middle ${bg} group-hover:bg-surface-3`;
 
   return (
     <tr className="group">
-      <td className={`${cell} pl-4`}>
-        <button
-          type="button"
-          onClick={onToggleWatch}
-          aria-pressed={watched}
-          aria-label={`${watched ? "Remove" : "Add"} ${m.makeName} ${m.familyName} ${watched ? "from" : "to"} watchlist`}
-          className={`grid size-8 place-items-center rounded-full transition-colors hover:bg-forest-900 ${watched ? "text-forest-400" : "text-faint hover:text-muted"}`}
-        >
-          <svg viewBox="0 0 20 20" className="size-[18px]" aria-hidden="true">
-            <path
-              d="M10 17s-6.5-3.9-6.5-8.6A3.6 3.6 0 0 1 10 6.2a3.6 3.6 0 0 1 6.5 2.2C16.5 13.1 10 17 10 17Z"
-              fill={watched ? "currentColor" : "none"}
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      </td>
-      <td className={`${cell} text-[13px] text-faint tabular-nums`}>{m.rank}</td>
+      <td className={`${cell} pl-5 text-[13px] text-faint tabular-nums`}>{m.rank}</td>
       <th scope="row" className={`${cell} sticky left-0 z-10 pr-4 text-left font-normal sm:static`}>
         <div className="flex items-center gap-3">
           <Monogram make={m.makeName} />
@@ -396,54 +327,4 @@ function Monogram({ make }: { make: string }) {
       {text}
     </span>
   );
-}
-
-// Watched families live in localStorage: per-browser, no account needed yet.
-const WATCH_KEY = "od.watchlist";
-const listeners = new Set<() => void>();
-let cache: { raw: string | null; set: Set<string> } = { raw: null, set: new Set() };
-
-function readWatchlist(): Set<string> {
-  let raw: string | null = null;
-  try {
-    raw = localStorage.getItem(WATCH_KEY);
-  } catch {}
-  if (raw !== cache.raw) {
-    let ids: string[] = [];
-    try {
-      ids = raw ? JSON.parse(raw) : [];
-    } catch {}
-    cache = { raw, set: new Set(ids) };
-  }
-  return cache.set;
-}
-
-const EMPTY = new Set<string>();
-
-function useWatchlist() {
-  const set = useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      window.addEventListener("storage", cb);
-      return () => {
-        listeners.delete(cb);
-        window.removeEventListener("storage", cb);
-      };
-    },
-    readWatchlist,
-    () => EMPTY,
-  );
-  return {
-    set,
-    size: set.size,
-    has: (id: string) => set.has(id),
-    toggle: (id: string) => {
-      const next = new Set(readWatchlist());
-      if (!next.delete(id)) next.add(id);
-      try {
-        localStorage.setItem(WATCH_KEY, JSON.stringify([...next]));
-      } catch {}
-      listeners.forEach((l) => l());
-    },
-  };
 }

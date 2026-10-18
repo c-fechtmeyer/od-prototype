@@ -57,5 +57,3 @@ keys live in `src/lib/metrics.ts`.
   tokens hold ≥ 4.5:1 contrast on every surface.
 - **Metrics / columns:** add an entry to `METRICS` in `src/lib/metrics.ts`. Add
   any new column to the `WINDOW_STATS` SQL in `src/lib/markets.ts`.
-- **Watchlist:** stored per browser in `localStorage` (`od.watchlist`) until
-  accounts exist.
