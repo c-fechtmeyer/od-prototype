@@ -28,8 +28,12 @@ export type Market = {
   windows: Record<WindowKey, WindowStats>;
 };
 
+export type SummaryStats = WindowStats & {
+  activeMarkets: number; // model families with at least one auction in the window
+};
+
 export type MarketSummary = {
-  windows: Record<WindowKey, WindowStats>;
+  windows: Record<WindowKey, SummaryStats>;
 };
 
 export type ArchiveStatus = {
@@ -96,9 +100,11 @@ ORDER BY i.rank, s.w`;
 
 const SUMMARY_SQL = `
 WITH ${WINDOWS_CTE}
-SELECT w.w, ${WINDOW_STATS}
+SELECT w.w, ${WINDOW_STATS},
+       count(DISTINCT a.make_key || '/' || m.model_family_key)::int AS active_markets
 FROM win w
 LEFT JOIN carsandbids.auctions a ON a.auction_end >= w.lo AND a.auction_end < w.hi
+LEFT JOIN carsandbids.models m ON m.make_key = a.make_key AND m.model_key = a.model_key
 GROUP BY w.w`;
 
 type StatsRow = {
@@ -157,7 +163,7 @@ export async function getMarkets(limit: number): Promise<{ markets: Market[]; su
   const [marketRows, summaryRows] = (await Promise.all([
     sql.query(MARKETS_SQL, [limit]),
     sql.query(SUMMARY_SQL),
-  ])) as [MarketRow[], StatsRow[]];
+  ])) as [MarketRow[], (StatsRow & { active_markets: number })[]];
 
   const byRank = new Map<number, Market>();
   for (const r of marketRows) {
@@ -178,8 +184,15 @@ export async function getMarkets(limit: number): Promise<{ markets: Market[]; su
     if (r.w) m.windows[r.w] = toStats(r);
   }
 
-  const summary: MarketSummary = { windows: emptyWindows() };
-  for (const r of summaryRows) if (r.w) summary.windows[r.w] = toStats(r);
+  const summary: MarketSummary = {
+    windows: {
+      c365: { ...EMPTY_STATS, activeMarkets: 0 },
+      p365: { ...EMPTY_STATS, activeMarkets: 0 },
+      c180: { ...EMPTY_STATS, activeMarkets: 0 },
+      p180: { ...EMPTY_STATS, activeMarkets: 0 },
+    },
+  };
+  for (const r of summaryRows) if (r.w) summary.windows[r.w] = { ...toStats(r), activeMarkets: r.active_markets };
 
   return { markets: [...byRank.values()].sort((a, b) => a.rank - b.rank), summary };
 }

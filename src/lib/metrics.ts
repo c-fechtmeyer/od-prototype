@@ -58,5 +58,3 @@ export const METRICS: Record<MetricKey, Metric> = {
     deltaKind: "pp",
   },
 };
-
-export const METRIC_ORDER: MetricKey[] = ["auctions", "volume", "price", "success"];
