@@ -5,7 +5,7 @@ schema, loaded daily by [auct-scrape-and-load](https://github.com/c-fechtmeyer/a
 
 The homepage, **Home** ("OverDrive Market Intelligence"), ranks the 10 most-listed model families over the last
 365 days. Each row shows the last 365 and 180 days, each with a YoY comp against
-the same span one year earlier. **See All Markets** links to the **Markets** tab
+the same span one year earlier. A **See all** link next to the **Top Markets** heading opens the **Markets** tab
 (`/markets`): every model family with any auction history, one compact row each,
 with a 365D / 180D toggle (it changes the figures shown, not the ranking) and
 25 / 50 / 100 rows per page. Any value or YoY
