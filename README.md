@@ -26,7 +26,10 @@ color and transmission as removable chips (all selected to start; removed values
 come back via a type-ahead box), drivetrain toggles, a model-year range, and a
 0–200k+ mileage range.
 Auctions outside the filters stay on the chart as faint dots that ignore hover and
-clicks. On phones the filter panel folds behind a "Filters" button. Under the
+clicks. On phones the filter panel folds behind a "Filters" button. Under the plot,
+a stats strip shows the last 365 days for whatever the filters select (Auctions,
+median and P25–P75 sale price, No Reserve %, Sell Through Rate), each with YoY
+against the same filters a year earlier. With no filters it matches the KPI tiles. Under the
 scatter, **Price Distribution** stacks last year's sales as
 dots (one per sale) in log-price bins, with density curves for the last 365 days and
 the year before. **Price by Color** compares each exterior color family's median sale
