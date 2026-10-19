@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { PrototypeRibbon } from "@/components/prototype-ribbon";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -24,6 +25,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col font-sans">
         <SiteHeader />
         {children}
+        {/* Shown on every page until the site is out of prototype. */}
+        <PrototypeRibbon />
       </body>
     </html>
   );
