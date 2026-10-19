@@ -1,7 +1,15 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { EMPTY_FILTERS, type Filters, ScatterFilters, buildOptions, matches } from "@/components/scatter-filters";
+import { FilteredStats } from "@/components/filtered-stats";
+import {
+  EMPTY_FILTERS,
+  type Filters,
+  ScatterFilters,
+  buildOptions,
+  isFiltered,
+  matches,
+} from "@/components/scatter-filters";
 import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
 import { logPriceTicks, priceTickLabel } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
@@ -53,6 +61,8 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
   }, [auctions]);
 
   const options = useMemo(() => buildOptions(points.map((p) => p.a)), [points]);
+  // Every auction the filters select, canceled ones included, for the stats under the chart.
+  const selected = useMemo(() => auctions.filter((a) => matches(a, filters)), [auctions, filters]);
   const inFilter = useMemo(() => points.map((p) => matches(p.a, filters)), [points, filters]);
   const shown = inFilter.filter(Boolean).length;
   const sold = points.filter((p, i) => p.sold && inFilter[i]).length;
@@ -209,6 +219,7 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
         )}
         {hovered && <Tooltip point={hovered.p} x={hovered.xy[0]} y={hovered.xy[1]} width={width} />}
       </div>
+      {auctions.length > 0 && <FilteredStats auctions={selected} filtered={isFiltered(filters)} />}
     </section>
   );
 }
