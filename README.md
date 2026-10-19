@@ -21,7 +21,13 @@ Cars & Bids. Families with generations get a tab row under the title, with **All
 plus one tab per generation, oldest first by median model year. Each tab opens a
 generation sub-page at `/markets/{make}/{family}/{generation}` (e.g.
 `/markets/porsche/911/996`) with the same tiles, scatter and table scoped to that
-generation. Under the scatter, **Price Distribution** stacks last year's sales as
+generation. The scatter has **filters** inside its card: body style, exact paint
+color and transmission as removable chips (all selected to start; removed values
+come back via a type-ahead box), drivetrain toggles, a model-year range, and a
+0–200k+ mileage range.
+Auctions outside the filters stay on the chart as faint dots that ignore hover and
+clicks. On phones the filter panel folds behind a "Filters" button. Under the
+scatter, **Price Distribution** stacks last year's sales as
 dots (one per sale) in log-price bins, with density curves for the last 365 days and
 the year before. **Price by Color** compares each exterior color family's median sale
 price with the overall median (last 365 days, colors with at least 5 sales). Color

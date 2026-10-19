@@ -57,3 +57,36 @@ body {
 ::selection {
   background: rgb(63 166 107 / 0.35);
 }
+
+/* Dual-thumb range slider: two range inputs share one track and only their thumbs take the pointer */
+.range-thumb {
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+.range-thumb::-webkit-slider-runnable-track {
+  background: transparent;
+}
+.range-thumb::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--color-fg);
+  border: 2px solid var(--color-forest-500);
+  cursor: grab;
+}
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--color-fg);
+  border: 2px solid var(--color-forest-500);
+  cursor: grab;
+}
+.range-thumb:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-forest-300);
+  outline-offset: 2px;
+}
