@@ -29,7 +29,7 @@ export default async function HomePage() {
               >
                 Cars &amp; Bids
               </a>{" "}
-              with more auction sources to come.
+              with more sources to come.
             </p>
             <p>Click into markets below for detailed breakdowns of each model.</p>
           </div>
