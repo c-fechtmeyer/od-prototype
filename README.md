@@ -17,9 +17,14 @@ Each family has a **model page** at `/markets/{make}/{family}` (e.g.
 family's KPI tiles (with Sell Through Rate), an **Auction Results** scatter (one dot
 per auction over time; solid = sold, light ring = reserve not met; canceled auctions
 aren't plotted), and a paginated **Latest Results** table linking to each listing on
-Cars & Bids. The 25 most-listed families are prerendered; the rest render on first
-visit and are cached. Pages are scoped by `MarketScope` in `src/lib/family.ts`, so
-finer cuts (generation, trim) can be added there later.
+Cars & Bids. Families with generations get a tab row under the title, with **All**
+plus one tab per generation, oldest first by median model year. Each tab opens a
+generation sub-page at `/markets/{make}/{family}/{generation}` (e.g.
+`/markets/porsche/911/996`) with the same tiles, scatter and table scoped to that
+generation. The 25 most-listed families and their generations are prerendered; the
+rest render on first visit and are cached. Every page is scoped by `MarketScope` in
+`src/lib/family.ts` (family + optional generation), so finer cuts (trim, ...) can
+be added there later.
 
 ## Stack
 
