@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Delta } from "@/components/delta";
 import { RangeBar } from "@/components/range-bar";
@@ -9,12 +10,10 @@ import {
   MetricHeader,
   Monogram,
   PriceLegend,
-  SearchBox,
   type Sort,
   SortButton,
   SortChip,
   familyHref,
-  matchesQuery,
   nextSort,
   sortRows,
   useRowClick,
@@ -30,27 +29,41 @@ const ROWS: { cur: WindowKey; prior: WindowKey; label: string; long: string }[] 
 
 // The Home table: a few families, each row stacking the 365D and 180D windows.
 export function MarketsTable({ markets, scale }: { markets: Market[]; scale: LogScale }) {
-  const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
 
   const rows = useMemo(() => {
     const metric = sort.key === "rank" ? null : METRICS[sort.key];
-    return sortRows(
-      markets.filter((m) => matchesQuery(m, query)),
-      sort,
-      (m) => metric?.sortValue(m.windows.c365) ?? null,
-    );
-  }, [markets, query, sort]);
+    return sortRows(markets, sort, (m) => metric?.sortValue(m.windows.c365) ?? null);
+  }, [markets, sort]);
 
   const onSort = (key: Sort["key"]) => setSort((s) => nextSort(s, key));
 
   return (
-    <section aria-label="Markets" className="mt-6">
-      {/* Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SearchBox value={query} onChange={setQuery} />
+    <section aria-labelledby="top-markets-title" className="mt-6">
+      <div className="mb-4 flex min-h-10 flex-wrap items-center gap-x-4 gap-y-2">
+        <h2 id="top-markets-title" className="text-lg font-semibold tracking-tight">
+          Top Markets
+        </h2>
+        <Link
+          href="/markets"
+          className="group inline-flex items-center gap-1 text-sm font-medium text-forest-300 transition-colors hover:text-forest-200"
+        >
+          See all
+          <svg
+            viewBox="0 0 16 16"
+            className="size-3.5 transition-transform group-hover:translate-x-0.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="M3 8h10m-4-4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Link>
         {sort.key !== "rank" && (
-          <SortChip label={`${METRICS[sort.key].label} (365D)`} onReset={() => setSort(DEFAULT_SORT)} />
+          <div className="ml-auto">
+            <SortChip label={`${METRICS[sort.key].label} (365D)`} onReset={() => setSort(DEFAULT_SORT)} />
+          </div>
         )}
       </div>
 
@@ -87,9 +100,7 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && (
-          <p className="px-6 py-14 text-center text-sm text-muted">No markets match “{query}”.</p>
-        )}
+        {rows.length === 0 && <p className="px-6 py-14 text-center text-sm text-muted">No markets yet.</p>}
       </div>
       <p className="mt-3 text-xs text-faint">
         YoY compares each window with the same span a year earlier. Hover a value for its definition and year-ago

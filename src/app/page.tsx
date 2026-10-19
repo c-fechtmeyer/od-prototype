@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { MarketsTable } from "@/components/markets-table";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { getMarkets, getMarketSummary } from "@/lib/markets";
@@ -39,24 +38,6 @@ export default async function HomePage() {
       <SummaryTiles summary={summary} />
       <MarketsTable markets={markets} scale={scale} />
 
-      <div className="mt-8 flex justify-center">
-        <Link
-          href="/markets"
-          className="inline-flex h-11 items-center gap-2 rounded-lg bg-forest-500 px-6 text-sm font-semibold text-canvas transition-colors hover:bg-forest-400"
-        >
-          See All Markets
-          <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
-            <path
-              d="M3 8h10m-4-4 4 4-4 4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Link>
-      </div>
     </main>
   );
 }
