@@ -21,7 +21,12 @@ Cars & Bids. Families with generations get a tab row under the title, with **All
 plus one tab per generation, oldest first by median model year. Each tab opens a
 generation sub-page at `/markets/{make}/{family}/{generation}` (e.g.
 `/markets/porsche/911/996`) with the same tiles, scatter and table scoped to that
-generation. The 25 most-listed families and their generations are prerendered; the
+generation. Under the scatter, **Price Distribution** stacks last year's sales as
+dots (one per sale) in log-price bins, with density curves for the last 365 days and
+the year before. **Price by Color** compares each exterior color family's median sale
+price with the overall median (last 365 days, colors with at least 5 sales). Color
+families come from keyword matching on C&B's paint names (`src/lib/colors.ts`). The
+25 most-listed families and their generations are prerendered; the
 rest render on first visit and are cached. Every page is scoped by `MarketScope` in
 `src/lib/family.ts` (family + optional generation), so finer cuts (trim, ...) can
 be added there later.

@@ -50,6 +50,8 @@ export type FamilyAuction = {
   saleAmount: number | null; // published sale price; missing on some older sold auctions
   highBid: number | null;
   bids: number | null;
+  exteriorColor: string | null; // C&B's free-text paint name
+  yearWindow: 0 | 1 | null; // 0: ended in the last 365 days, 1: the 365 days before that
 };
 
 export type Generation = { label: string; slug: string; auctions: number };
@@ -164,7 +166,9 @@ export async function getFamilyPage(
     sql.query(
       `SELECT a.id, (extract(epoch FROM a.auction_end) * 1000)::float8 AS ended, a.title, a.sub_title,
               a.model_generation AS generation, a.mileage, a.status, a.no_reserve, a.sale_amount,
-              a.current_bid_amount, a.bids
+              a.current_bid_amount, a.bids, a.exterior_color,
+              CASE WHEN a.auction_end >= now() - interval '365 days' THEN 0
+                   WHEN a.auction_end >= now() - interval '730 days' THEN 1 END AS year_window
        FROM (${scoped}) a
        ORDER BY a.auction_end DESC`,
       params,
@@ -183,6 +187,8 @@ export async function getFamilyPage(
       sale_amount: number | null;
       current_bid_amount: number | null;
       bids: number | null;
+      exterior_color: string | null;
+      year_window: 0 | 1 | null;
     }[],
   ];
 
@@ -206,6 +212,8 @@ export async function getFamilyPage(
       saleAmount: r.sale_amount,
       highBid: r.current_bid_amount,
       bids: r.bids,
+      exteriorColor: r.exterior_color,
+      yearWindow: r.year_window,
     })),
   };
 }

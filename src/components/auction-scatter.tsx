@@ -2,8 +2,9 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
+import { logPriceTicks, priceTickLabel } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
-import { formatCount, formatDate, formatDollars, formatMoney } from "@/lib/format";
+import { formatCount, formatDate, formatDollars } from "@/lib/format";
 
 const HEIGHT = 380;
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 56 };
@@ -148,7 +149,7 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
               <g key={`y${t.v}`}>
                 <line x1={MARGIN.left} x2={width - MARGIN.right} y1={t.y} y2={t.y} className="stroke-line" />
                 <text x={MARGIN.left - 8} y={t.y} dy="0.32em" textAnchor="end" className="fill-faint text-[11px] tabular-nums">
-                  {formatMoney(t.v).replace(/\.0+(?=[kMB])/, "")}
+                  {priceTickLabel(t.v)}
                 </text>
               </g>
             ))}
@@ -245,27 +246,9 @@ function layout(points: Point[], width: number) {
 
   return {
     xy: points.map((p) => [x(p.t), y(p.price)] as const),
-    yTicks: priceTicks(10 ** lo, 10 ** hi).map((v) => ({ v, y: y(v) })),
+    yTicks: logPriceTicks(10 ** lo, 10 ** hi).map((v) => ({ v, y: y(v) })),
     xTicks: timeTicks(t0, t1, plotW).map((t) => ({ ...t, x: x(t.v) })),
   };
-}
-
-// Clean 1-2-5 steps on a log axis; thinned to 1-3 steps when the range is wide.
-function priceTicks(min: number, max: number): number[] {
-  const steps = (mults: number[]) => {
-    const out: number[] = [];
-    for (let e = Math.floor(Math.log10(min)); e <= Math.ceil(Math.log10(max)); e++) {
-      for (const m of mults) {
-        const v = m * 10 ** e;
-        if (v >= min && v <= max) out.push(v);
-      }
-    }
-    return out;
-  };
-  const fine = steps([1, 2, 5]);
-  if (fine.length <= 7 && fine.length >= 3) return fine;
-  if (fine.length > 7) return steps([1, 3]);
-  return steps([1, 1.5, 2, 3, 5, 7]);
 }
 
 // Year boundaries for long spans; quarter starts when there's less than ~2 years.
