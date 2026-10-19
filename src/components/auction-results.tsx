@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PAGE_SIZES, type PageSize, Pagination, paginate } from "@/components/table-parts";
+import { Pagination, paginate } from "@/components/table-parts";
 import { STATUS_LABEL, auctionUrl, isSold, resultPrice } from "@/lib/auction";
 import type { AuctionStatus, FamilyAuction } from "@/lib/family";
 import { formatCount, formatDate, formatDollars } from "@/lib/format";
@@ -13,11 +13,12 @@ const STATUS_STYLE: Record<AuctionStatus, string> = {
   canceled: "bg-surface-3 text-faint",
 };
 
-// Every individual auction, newest first.
+const PAGE_SIZE = 10;
+
+// Every individual auction, newest first, ten to a page.
 export function AuctionResults({ auctions, showGeneration }: { auctions: FamilyAuction[]; showGeneration: boolean }) {
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState<PageSize>(PAGE_SIZES[0]);
-  const { pageCount, current, first, visible } = paginate(auctions, page, pageSize);
+  const { pageCount, current, first, visible } = paginate(auctions, page, PAGE_SIZE);
 
   return (
     <section aria-labelledby="latest-results-title">
@@ -117,12 +118,7 @@ export function AuctionResults({ auctions, showGeneration }: { auctions: FamilyA
         shown={visible.length}
         current={current}
         pageCount={pageCount}
-        pageSize={pageSize}
         onPage={setPage}
-        onPageSize={(size) => {
-          setPageSize(size);
-          setPage(0);
-        }}
       />
     </section>
   );

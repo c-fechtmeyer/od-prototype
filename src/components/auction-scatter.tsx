@@ -9,6 +9,9 @@ const HEIGHT = 380;
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 56 };
 const R = 4; // >= 8px markers
 const HIT = 14; // hover radius, larger than the mark
+// Partly transparent, so clusters build up darker where auctions overlap.
+const SOLD_OPACITY = 0.6;
+const UNSOLD_OPACITY = 0.55;
 
 type Point = { a: FamilyAuction; t: number; price: number; sold: boolean; isHighBid: boolean };
 
@@ -53,9 +56,17 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
     return order.map((i) => {
       const [x, y] = chart.xy[i];
       return points[i].sold ? (
-        <circle key={i} cx={x} cy={y} r={R} className="fill-chart-sold stroke-surface" strokeWidth={1} />
+        <circle key={i} cx={x} cy={y} r={R} className="fill-chart-sold" fillOpacity={SOLD_OPACITY} />
       ) : (
-        <circle key={i} cx={x} cy={y} r={R - 0.5} className="fill-none stroke-chart-unsold" strokeWidth={1.5} opacity={0.8} />
+        <circle
+          key={i}
+          cx={x}
+          cy={y}
+          r={R - 0.5}
+          className="fill-none stroke-chart-unsold"
+          strokeWidth={1.5}
+          strokeOpacity={UNSOLD_OPACITY}
+        />
       );
     });
   }, [chart, points]);
@@ -89,7 +100,7 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
             Auction Results
           </h2>
           <p className="mt-1 max-w-xl text-xs text-muted">
-            Every auction, one dot each: the sale price, or the high bid when the reserve wasn&apos;t met.
+            One dot per auction: the sale price, or the high bid when the reserve wasn&apos;t met.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">

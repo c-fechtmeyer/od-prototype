@@ -275,6 +275,8 @@ export function paginate<T>(rows: T[], page: number, pageSize: number) {
   return { pageCount, current, first, visible: rows.slice(first, first + pageSize) };
 }
 
+// Page controls under a table. The rows-per-page selector appears only when the
+// table lets the viewer choose (pass pageSize and onPageSize).
 export function Pagination({
   noun,
   total,
@@ -292,9 +294,9 @@ export function Pagination({
   shown: number;
   current: number;
   pageCount: number;
-  pageSize: PageSize;
+  pageSize?: PageSize;
   onPage: (page: number) => void;
-  onPageSize: (size: PageSize) => void;
+  onPageSize?: (size: PageSize) => void;
 }) {
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 text-xs text-muted">
@@ -304,10 +306,12 @@ export function Pagination({
           : `Showing ${formatCount(first + 1)}–${formatCount(first + shown)} of ${formatCount(total)} ${noun}`}
       </span>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <div className="flex items-center gap-2">
-          <span>Rows per page</span>
-          <Segmented label="Rows per page" options={PAGE_SIZES} value={pageSize} onChange={onPageSize} />
-        </div>
+        {pageSize != null && onPageSize && (
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+            <Segmented label="Rows per page" options={PAGE_SIZES} value={pageSize} onChange={onPageSize} />
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <PageButton label="Previous page" disabled={current === 0} onClick={() => onPage(current - 1)}>
             <path d="M10 3 5 8l5 5" />
