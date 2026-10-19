@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { EMPTY_FILTERS, type Filters, ScatterFilters, buildOptions, matches } from "@/components/scatter-filters";
 import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
 import { logPriceTicks, priceTickLabel } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
@@ -13,16 +14,20 @@ const HIT = 14; // hover radius, larger than the mark
 // Partly transparent, so clusters build up darker where auctions overlap.
 const SOLD_OPACITY = 0.6;
 const UNSOLD_OPACITY = 0.55;
+// Auctions outside the filters stay on the chart, barely visible, and don't respond to hover.
+const FILTERED_OUT_OPACITY = 0.08;
 
 type Point = { a: FamilyAuction; t: number; price: number; sold: boolean; isHighBid: boolean };
 
 // One dot per auction: when it ended (x) against its result price (y, log scale).
 // Sold auctions are solid; reserve-not-met auctions are light rings. Canceled
-// auctions have no result, so they're counted in the legend but not plotted.
+// auctions have no result, so they're counted in the legend but not plotted. The
+// filters above the plot fade out the auctions they exclude.
 export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -32,7 +37,7 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
     return () => ro.disconnect();
   }, []);
 
-  const { points, canceled, sold, unsold } = useMemo(() => {
+  const { points, canceled } = useMemo(() => {
     const points: Point[] = [];
     let canceled = 0;
     for (const a of auctions) {
@@ -44,20 +49,35 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
       if (price == null || price <= 0) continue;
       points.push({ a, t: a.ended, price, sold: isSold(a), isHighBid });
     }
-    const sold = points.filter((p) => p.sold).length;
-    return { points, canceled, sold, unsold: points.length - sold };
+    return { points, canceled };
   }, [auctions]);
+
+  const options = useMemo(() => buildOptions(points.map((p) => p.a)), [points]);
+  const inFilter = useMemo(() => points.map((p) => matches(p.a, filters)), [points, filters]);
+  const shown = inFilter.filter(Boolean).length;
+  const sold = points.filter((p, i) => p.sold && inFilter[i]).length;
+  const unsold = shown - sold;
 
   const chart = useMemo(() => (width > 0 && points.length ? layout(points, width) : null), [points, width]);
 
-  // The dot layer only changes with the data or the width, not on every hover.
+  // The dot layer changes with the data, width or filters, not on every hover.
+  // Filtered-out dots draw first, so the ones in view always sit on top.
   const dots = useMemo(() => {
     if (!chart) return null;
-    const order = chart.xy.map((_, i) => i).sort((i, j) => Number(points[i].sold) - Number(points[j].sold));
+    const rank = (i: number) => (inFilter[i] ? 2 : 0) + (points[i].sold ? 1 : 0);
+    const order = chart.xy.map((_, i) => i).sort((i, j) => rank(i) - rank(j));
     return order.map((i) => {
       const [x, y] = chart.xy[i];
+      const out = !inFilter[i];
       return points[i].sold ? (
-        <circle key={i} cx={x} cy={y} r={R} className="fill-chart-sold" fillOpacity={SOLD_OPACITY} />
+        <circle
+          key={i}
+          cx={x}
+          cy={y}
+          r={R}
+          className="fill-chart-sold"
+          fillOpacity={out ? FILTERED_OUT_OPACITY : SOLD_OPACITY}
+        />
       ) : (
         <circle
           key={i}
@@ -66,17 +86,18 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
           r={R - 0.5}
           className="fill-none stroke-chart-unsold"
           strokeWidth={1.5}
-          strokeOpacity={UNSOLD_OPACITY}
+          strokeOpacity={out ? FILTERED_OUT_OPACITY : UNSOLD_OPACITY}
         />
       );
     });
-  }, [chart, points]);
+  }, [chart, points, inFilter]);
 
   const nearest = (mx: number, my: number) => {
     if (!chart) return null;
     let best: number | null = null;
     let bestD = HIT * HIT;
     chart.xy.forEach(([x, y], i) => {
+      if (!inFilter[i]) return; // filtered-out auctions don't respond to hover or click
       const d = (x - mx) ** 2 + (y - my) ** 2;
       if (d <= bestD) {
         bestD = d;
@@ -91,7 +112,7 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
     return [e.clientX - r.left, e.clientY - r.top] as const;
   };
 
-  const hovered = hover != null && chart ? { p: points[hover], xy: chart.xy[hover] } : null;
+  const hovered = hover != null && chart && inFilter[hover] ? { p: points[hover], xy: chart.xy[hover] } : null;
 
   return (
     <section aria-labelledby="auction-results-title" className="rounded-2xl border border-line bg-surface/80 p-4 sm:p-5">
@@ -120,6 +141,16 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
           {canceled > 0 && <span className="text-faint">{formatCount(canceled)} canceled, not shown</span>}
         </div>
       </div>
+
+      {points.length > 0 && (
+        <ScatterFilters
+          options={options}
+          filters={filters}
+          onChange={setFilters}
+          shown={shown}
+          total={points.length}
+        />
+      )}
 
       <div ref={wrapRef} className="relative" style={{ height: HEIGHT }}>
         {points.length === 0 && (

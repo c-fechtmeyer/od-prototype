@@ -45,12 +45,16 @@ export type FamilyAuction = {
   subTitle: string | null;
   generation: string | null;
   mileage: number | null;
+  year: number | null; // model year
   status: AuctionStatus;
   noReserve: boolean;
   saleAmount: number | null; // published sale price; missing on some older sold auctions
   highBid: number | null;
   bids: number | null;
   exteriorColor: string | null; // C&B's free-text paint name
+  bodyStyle: string | null; // from carsandbids.body_styles: Coupe, Convertible, ...
+  transmission: string | null; // from carsandbids.transmissions: Automatic, Manual
+  driveTrain: string | null; // from carsandbids.drive_trains: FWD, RWD, AWD
   yearWindow: 0 | 1 | null; // 0: ended in the last 365 days, 1: the 365 days before that
 };
 
@@ -165,11 +169,16 @@ export async function getFamilyPage(
     ),
     sql.query(
       `SELECT a.id, (extract(epoch FROM a.auction_end) * 1000)::float8 AS ended, a.title, a.sub_title,
-              a.model_generation AS generation, a.mileage, a.status, a.no_reserve, a.sale_amount,
+              a.model_generation AS generation, a.mileage, a.year, a.status, a.no_reserve, a.sale_amount,
               a.current_bid_amount, a.bids, a.exterior_color,
+              bs.body_style_name AS body_style, tr.transmission_name AS transmission,
+              dt.drive_train_name AS drive_train,
               CASE WHEN a.auction_end >= now() - interval '365 days' THEN 0
                    WHEN a.auction_end >= now() - interval '730 days' THEN 1 END AS year_window
        FROM (${scoped}) a
+       LEFT JOIN carsandbids.body_styles bs ON bs.body_style_id = a.body_style
+       LEFT JOIN carsandbids.transmissions tr ON tr.transmission_id = a.transmission
+       LEFT JOIN carsandbids.drive_trains dt ON dt.drive_train_id = a.drive_train
        ORDER BY a.auction_end DESC`,
       params,
     ),
@@ -182,12 +191,16 @@ export async function getFamilyPage(
       sub_title: string | null;
       generation: string | null;
       mileage: number | null;
+      year: number | null;
       status: AuctionStatus;
       no_reserve: boolean;
       sale_amount: number | null;
       current_bid_amount: number | null;
       bids: number | null;
       exterior_color: string | null;
+      body_style: string | null;
+      transmission: string | null;
+      drive_train: string | null;
       year_window: 0 | 1 | null;
     }[],
   ];
@@ -207,12 +220,16 @@ export async function getFamilyPage(
       subTitle: r.sub_title,
       generation: r.generation,
       mileage: r.mileage,
+      year: r.year,
       status: r.status,
       noReserve: r.no_reserve,
       saleAmount: r.sale_amount,
       highBid: r.current_bid_amount,
       bids: r.bids,
       exteriorColor: r.exterior_color,
+      bodyStyle: r.body_style,
+      transmission: r.transmission,
+      driveTrain: r.drive_train,
       yearWindow: r.year_window,
     })),
   };
