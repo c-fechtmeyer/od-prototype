@@ -168,6 +168,7 @@ export function ScatterFilters({
             removed={filters.removed.color}
             onChange={(s) => setRemoved("color", s)}
             collapseAt={14}
+            suggestAlphabetically
           />
         </div>
       </div>
@@ -215,12 +216,15 @@ function TagFilter({
   removed,
   onChange,
   collapseAt = 8,
+  suggestAlphabetically = false,
 }: {
   label: string;
   options: Option[];
   removed: Set<string>;
   onChange: (removed: Set<string>) => void;
   collapseAt?: number;
+  // Removed values are suggested most common first, or A–Z (long lists like color).
+  suggestAlphabetically?: boolean;
 }) {
   const id = useId();
   const [expanded, setExpanded] = useState(false);
@@ -232,8 +236,11 @@ function TagFilter({
   const visible = expanded ? selected : selected.slice(0, collapseAt);
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return options.filter((o) => removed.has(o.key) && o.label.toLowerCase().includes(q));
-  }, [options, removed, query]);
+    const matching = options.filter((o) => removed.has(o.key) && o.label.toLowerCase().includes(q));
+    return suggestAlphabetically
+      ? matching.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }))
+      : matching;
+  }, [options, removed, query, suggestAlphabetically]);
 
   const remove = (key: string) => onChange(new Set([...removed, key]));
   const add = (key: string) => {
