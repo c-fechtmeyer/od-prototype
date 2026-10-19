@@ -19,6 +19,11 @@ export function formatMoney(n: number | null): string {
   return `$${Math.round(n)}`;
 }
 
+// Exact dollars for individual results: $95,000.
+export function formatDollars(n: number | null): string {
+  return n == null ? "—" : `$${Math.round(n).toLocaleString("en-US")}`;
+}
+
 export function formatRange(lo: number | null, hi: number | null): string {
   if (lo == null || hi == null) return INSUFFICIENT;
   return `${formatMoney(lo)}–${formatMoney(hi).slice(1)}`;

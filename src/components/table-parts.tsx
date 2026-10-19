@@ -1,11 +1,40 @@
 // Pieces shared by the Home table and the Markets list, so the two stay consistent.
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef } from "react";
 import { RangeAxis } from "@/components/range-bar";
-import { INSUFFICIENT } from "@/lib/format";
+import { INSUFFICIENT, formatCount } from "@/lib/format";
 import type { Metric, MetricKey } from "@/lib/metrics";
 import type { LogScale } from "@/lib/scale";
 
 export type Sort = { key: "rank" | MetricKey; dir: "asc" | "desc" };
+
+export const familyHref = (m: { makeSlug: string; familySlug: string }) => `/markets/${m.makeSlug}/${m.familySlug}`;
+
+// Clicking anywhere on a row opens the family's page. The name link inside the row
+// stays the real (keyboard and screen-reader) target; clicks on links, buttons, or
+// while selecting text are left alone.
+export function useRowClick() {
+  const router = useRouter();
+  return (href: string) => (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a, button") || window.getSelection()?.toString()) return;
+    router.push(href);
+  };
+}
+
+// The family name, linked to its page. Not prefetched: each page carries every
+// auction for the family, too heavy to fetch for every row in view.
+export function FamilyLink({ href, children, className = "" }: { href: string; children: ReactNode; className?: string }) {
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      className={`font-semibold text-fg decoration-forest-600 underline-offset-4 hover:underline ${className}`}
+    >
+      {children}
+    </Link>
+  );
+}
 
 export const DEFAULT_SORT: Sort = { key: "rank", dir: "asc" };
 
@@ -232,5 +261,100 @@ export function Monogram({ make, size = "md" }: { make: string; size?: "sm" | "m
     >
       {text}
     </span>
+  );
+}
+
+export const PAGE_SIZES = [25, 50, 100] as const;
+export type PageSize = (typeof PAGE_SIZES)[number];
+
+// The slice of rows on the requested page, clamped to the last page.
+export function paginate<T>(rows: T[], page: number, pageSize: number) {
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const current = Math.min(page, pageCount - 1);
+  const first = current * pageSize;
+  return { pageCount, current, first, visible: rows.slice(first, first + pageSize) };
+}
+
+export function Pagination({
+  noun,
+  total,
+  first,
+  shown,
+  current,
+  pageCount,
+  pageSize,
+  onPage,
+  onPageSize,
+}: {
+  noun: string;
+  total: number;
+  first: number;
+  shown: number;
+  current: number;
+  pageCount: number;
+  pageSize: PageSize;
+  onPage: (page: number) => void;
+  onPageSize: (size: PageSize) => void;
+}) {
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 text-xs text-muted">
+      <span className="tabular-nums">
+        {total === 0
+          ? `0 ${noun}`
+          : `Showing ${formatCount(first + 1)}–${formatCount(first + shown)} of ${formatCount(total)} ${noun}`}
+      </span>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="flex items-center gap-2">
+          <span>Rows per page</span>
+          <Segmented label="Rows per page" options={PAGE_SIZES} value={pageSize} onChange={onPageSize} />
+        </div>
+        <div className="flex items-center gap-2">
+          <PageButton label="Previous page" disabled={current === 0} onClick={() => onPage(current - 1)}>
+            <path d="M10 3 5 8l5 5" />
+          </PageButton>
+          <span className="min-w-[88px] text-center tabular-nums">
+            Page {formatCount(current + 1)} of {formatCount(pageCount)}
+          </span>
+          <PageButton label="Next page" disabled={current >= pageCount - 1} onClick={() => onPage(current + 1)}>
+            <path d="m6 3 5 5-5 5" />
+          </PageButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PageButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="grid size-8 place-items-center rounded-lg border border-line bg-surface text-fg transition-colors hover:border-line-strong disabled:cursor-not-allowed disabled:text-faint disabled:opacity-50 disabled:hover:border-line"
+    >
+      <svg
+        viewBox="0 0 16 16"
+        className="size-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {children}
+      </svg>
+    </button>
   );
 }

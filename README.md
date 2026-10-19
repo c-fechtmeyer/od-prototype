@@ -12,6 +12,15 @@ with a 365D / 180D toggle (it changes the figures shown, not the ranking) and
 comparison that can't be computed reads "Insufficient Data". **About** (`/about`)
 holds the data source and archive status.
 
+Each family has a **model page** at `/markets/{make}/{family}` (e.g.
+`/markets/porsche/911`), opened by clicking a row on Home or Markets. It shows the
+family's KPI tiles (with Sell Through Rate), an **Auction Results** scatter (one dot
+per auction over time; solid = sold, light ring = reserve not met; canceled auctions
+aren't plotted), and a paginated **Latest Results** table linking to each listing on
+Cars & Bids. The 25 most-listed families are prerendered; the rest render on first
+visit and are cached. Pages are scoped by `MarketScope` in `src/lib/family.ts`, so
+finer cuts (generation, trim) can be added there later.
+
 ## Stack
 
 - **Next.js 16** (App Router, Cache Components) + **Tailwind CSS v4**
@@ -51,6 +60,8 @@ Every window is anchored at `now()`. **c365** and **c180** are the trailing 365 
 | Sale Prices | Interquartile range (P25–P75) of `sale_amount` for sold auctions, reserve and no-reserve. The YoY figure is the change in the median |
 | No Reserve % | No-reserve auctions divided by total auctions (canceled included). The YoY figure is in percentage points |
 | Active Markets (summary tile) | Model families with at least one auction in the window |
+| Sell Through Rate (model page) | Sold auctions (`sold` + `sold_after`) divided by auctions that ran to the end (canceled excluded). The YoY figure is in percentage points |
+| Scatter price (model page) | Sale price for sold auctions; the high bid for reserve-not-met auctions and for older sold auctions with no published sale price |
 | Models Tracked (Markets tab) | Model families with at least one observed auction, all time. "New" counts families whose first auction ended in the last 365 days |
 
 All of the SQL lives in `src/lib/markets.ts`. Metric formatting, deltas, and sort

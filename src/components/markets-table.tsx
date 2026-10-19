@@ -5,6 +5,7 @@ import { Delta } from "@/components/delta";
 import { RangeBar } from "@/components/range-bar";
 import {
   DEFAULT_SORT,
+  FamilyLink,
   MetricHeader,
   Monogram,
   PriceLegend,
@@ -12,9 +13,11 @@ import {
   type Sort,
   SortButton,
   SortChip,
+  familyHref,
   matchesQuery,
   nextSort,
   sortRows,
+  useRowClick,
 } from "@/components/table-parts";
 import type { Market, WindowKey } from "@/lib/markets";
 import { METRICS, type Metric } from "@/lib/metrics";
@@ -99,16 +102,20 @@ export function MarketsTable({ markets, scale }: { markets: Market[]; scale: Log
 function MarketRow({ market: m, scale, striped }: { market: Market; scale: LogScale; striped: boolean }) {
   const bg = striped ? "bg-surface-2" : "bg-surface";
   const cell = `border-b border-line/60 py-3 align-middle ${bg} group-hover:bg-surface-3`;
+  const href = familyHref(m);
+  const onRowClick = useRowClick();
 
   return (
-    <tr className="group">
+    <tr className="group cursor-pointer" onClick={onRowClick(href)}>
       <td className={`${cell} pl-5 text-[13px] text-faint tabular-nums`}>{m.rank}</td>
       <th scope="row" className={`${cell} sticky left-0 z-10 pr-4 text-left font-normal sm:static`}>
         <div className="flex items-center gap-3">
           <Monogram make={m.makeName} />
           <div className="min-w-0">
             <div className="flex items-baseline gap-1.5 whitespace-nowrap">
-              <span className="text-[15px] font-semibold text-fg">{m.familyName}</span>
+              <FamilyLink href={href} className="text-[15px]">
+                {m.familyName}
+              </FamilyLink>
               <span className="text-[13px] text-muted">{m.makeName}</span>
             </div>
             {m.generations.length > 0 && (

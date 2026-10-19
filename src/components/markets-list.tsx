@@ -5,20 +5,27 @@ import { Delta } from "@/components/delta";
 import { RangeBar } from "@/components/range-bar";
 import {
   DEFAULT_SORT,
+  FamilyLink,
   MetricHeader,
   MetricValue,
   Monogram,
+  PAGE_SIZES,
+  type PageSize,
+  Pagination,
   PriceLegend,
   SearchBox,
   Segmented,
   type Sort,
   SortButton,
   SortChip,
+  familyHref,
   matchesQuery,
   nextSort,
+  paginate,
   sortRows,
+  useRowClick,
 } from "@/components/table-parts";
-import { INSUFFICIENT, formatCount } from "@/lib/format";
+import { INSUFFICIENT } from "@/lib/format";
 import type { Market, WindowKey } from "@/lib/markets";
 import { METRICS, type Metric } from "@/lib/metrics";
 import type { LogScale } from "@/lib/scale";
@@ -29,17 +36,15 @@ const WINDOWS = {
 } as const satisfies Record<string, { cur: WindowKey; prior: WindowKey; long: string }>;
 type WindowLabel = keyof typeof WINDOWS;
 
-const PAGE_SIZES = [25, 50, 100] as const;
-type PageSize = (typeof PAGE_SIZES)[number];
-
 // The Markets tab: every family, one compact line each, for one window at a time.
 export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogScale }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const [windowLabel, setWindowLabel] = useState<WindowLabel>("365D");
-  const [pageSize, setPageSize] = useState<PageSize>(25);
+  const [pageSize, setPageSize] = useState<PageSize>(PAGE_SIZES[0]);
   const [page, setPage] = useState(0);
   const win = WINDOWS[windowLabel];
+  const onRowClick = useRowClick();
 
   const rows = useMemo(() => {
     const metric = sort.key === "rank" ? null : METRICS[sort.key];
@@ -50,10 +55,7 @@ export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogS
     );
   }, [markets, query, sort, win]);
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const current = Math.min(page, pageCount - 1);
-  const first = current * pageSize;
-  const visible = rows.slice(first, first + pageSize);
+  const { pageCount, current, first, visible } = paginate(rows, page, pageSize);
 
   // Any change to what's listed, or how, starts back at page 1.
   const reset =
@@ -124,12 +126,12 @@ export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogS
               const bg = i % 2 === 1 ? "bg-surface-2" : "bg-surface";
               const cell = `border-b border-line/60 py-2.5 align-middle ${bg} group-hover:bg-surface-3`;
               return (
-                <tr key={m.familyId} className="group">
+                <tr key={m.familyId} className="group cursor-pointer" onClick={onRowClick(familyHref(m))}>
                   <td className={`${cell} pl-5 text-[13px] text-faint tabular-nums`}>{m.rank}</td>
                   <th scope="row" className={`${cell} sticky left-0 z-10 pr-4 text-left font-normal sm:static`}>
                     <div className="flex items-center gap-2.5 whitespace-nowrap">
                       <Monogram make={m.makeName} size="sm" />
-                      <span className="font-semibold text-fg">{m.familyName}</span>
+                      <FamilyLink href={familyHref(m)}>{m.familyName}</FamilyLink>
                       <span className="text-[13px] text-muted">{m.makeName}</span>
                       {m.generations.length > 0 && (
                         <span className="text-xs text-faint" title={m.generations.join(", ")}>
@@ -168,31 +170,17 @@ export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogS
         )}
       </div>
 
-      {/* Pagination */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 text-xs text-muted">
-        <span className="tabular-nums">
-          {rows.length === 0
-            ? "0 markets"
-            : `Showing ${formatCount(first + 1)}–${formatCount(first + visible.length)} of ${formatCount(rows.length)} markets`}
-        </span>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-          <div className="flex items-center gap-2">
-            <span>Rows per page</span>
-            <Segmented label="Rows per page" options={PAGE_SIZES} value={pageSize} onChange={reset(setPageSize)} />
-          </div>
-          <div className="flex items-center gap-2">
-            <PageButton label="Previous page" disabled={current === 0} onClick={() => setPage(current - 1)}>
-              <path d="M10 3 5 8l5 5" />
-            </PageButton>
-            <span className="min-w-[88px] text-center tabular-nums">
-              Page {formatCount(current + 1)} of {formatCount(pageCount)}
-            </span>
-            <PageButton label="Next page" disabled={current >= pageCount - 1} onClick={() => setPage(current + 1)}>
-              <path d="m6 3 5 5-5 5" />
-            </PageButton>
-          </div>
-        </div>
-      </div>
+      <Pagination
+        noun="markets"
+        total={rows.length}
+        first={first}
+        shown={visible.length}
+        current={current}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        onPage={setPage}
+        onPageSize={reset(setPageSize)}
+      />
     </section>
   );
 }
@@ -220,40 +208,5 @@ function MetricCell({
       <MetricValue text={text} width={width} />
       <Delta value={metric.delta(cur, prior)} kind={metric.deltaKind} className="text-xs" />
     </div>
-  );
-}
-
-function PageButton({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="grid size-8 place-items-center rounded-lg border border-line bg-surface text-fg transition-colors hover:border-line-strong disabled:cursor-not-allowed disabled:text-faint disabled:opacity-50 disabled:hover:border-line"
-    >
-      <svg
-        viewBox="0 0 16 16"
-        className="size-4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        {children}
-      </svg>
-    </button>
   );
 }

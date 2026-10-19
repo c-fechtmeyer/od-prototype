@@ -1,7 +1,7 @@
 import { formatCount, formatMoney, formatPct, formatRange, pctChange, ratio } from "./format";
 import type { WindowStats } from "./markets";
 
-export type MetricKey = "auctions" | "volume" | "price" | "noReserve";
+export type MetricKey = "auctions" | "volume" | "price" | "noReserve" | "sellThrough";
 
 export type Metric = {
   key: MetricKey;
@@ -15,6 +15,14 @@ export type Metric = {
 };
 
 export const noReserveShare = (s: WindowStats) => ratio(s.noReserveAuctions, s.auctions);
+export const sellThroughRate = (s: WindowStats) => ratio(s.soldAuctions, s.completedAuctions);
+
+// Change in a rate, in percentage points; null when either side can't be computed.
+const pointChange = (rate: (s: WindowStats) => number | null) => (c: WindowStats, p: WindowStats) => {
+  const cr = rate(c);
+  const pr = rate(p);
+  return cr == null || pr == null ? null : cr - pr;
+};
 
 export const METRICS: Record<MetricKey, Metric> = {
   auctions: {
@@ -50,11 +58,16 @@ export const METRICS: Record<MetricKey, Metric> = {
     help: "Share of auctions offered with no reserve: no-reserve auctions ÷ total auctions (canceled included). YoY is in percentage points.",
     format: (s) => formatPct(noReserveShare(s)),
     sortValue: (s) => noReserveShare(s),
-    delta: (c, p) => {
-      const cr = noReserveShare(c);
-      const pr = noReserveShare(p);
-      return cr == null || pr == null ? null : cr - pr;
-    },
+    delta: pointChange(noReserveShare),
+    deltaKind: "pp",
+  },
+  sellThrough: {
+    key: "sellThrough",
+    label: "Sell Through Rate",
+    help: "Share of auctions that sold (including sold-after deals), out of all auctions that ran to the end; canceled auctions are excluded. YoY is in percentage points.",
+    format: (s) => formatPct(sellThroughRate(s)),
+    sortValue: (s) => sellThroughRate(s),
+    delta: pointChange(sellThroughRate),
     deltaKind: "pp",
   },
 };

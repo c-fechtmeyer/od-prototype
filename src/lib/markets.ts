@@ -14,6 +14,8 @@ export type WindowStats = {
   p50: number | null;
   p75: number | null;
   noReserveAuctions: number; // listings offered with no reserve, canceled included
+  soldAuctions: number; // sold or sold after
+  completedAuctions: number; // ran to the end: every listing except canceled ones
 };
 
 export type Market = {
@@ -21,6 +23,8 @@ export type Market = {
   rank: number;
   makeKey: string;
   familyKey: string;
+  makeSlug: string; // URL segments for the family's page: /markets/{makeSlug}/{familySlug}
+  familySlug: string;
   makeName: string;
   familyName: string;
   generations: string[];
@@ -44,7 +48,7 @@ export type ArchiveStatus = {
 
 // Every window's stats are computed in one pass. The windows are anchored at now(),
 // and the ranking is by listing count over the trailing 365 days.
-const WINDOWS_CTE = `
+export const WINDOWS_CTE = `
 win (w, lo, hi) AS (
     VALUES ('c365', now() - interval '365 days', now()),
            ('p365', now() - interval '730 days', now() - interval '365 days'),
@@ -52,13 +56,15 @@ win (w, lo, hi) AS (
            ('p180', now() - interval '545 days', now() - interval '365 days')
 )`;
 
-const WINDOW_STATS = `
+export const WINDOW_STATS = `
     count(*)::int AS auctions,
     coalesce(sum(a.sale_amount) FILTER (WHERE a.is_sold), 0)::float8 AS volume,
     percentile_cont(0.25) WITHIN GROUP (ORDER BY a.sale_amount) FILTER (WHERE a.is_sold) AS p25,
     percentile_cont(0.50) WITHIN GROUP (ORDER BY a.sale_amount) FILTER (WHERE a.is_sold) AS p50,
     percentile_cont(0.75) WITHIN GROUP (ORDER BY a.sale_amount) FILTER (WHERE a.is_sold) AS p75,
-    count(*) FILTER (WHERE a.no_reserve)::int AS no_reserve_auctions`;
+    count(*) FILTER (WHERE a.no_reserve)::int AS no_reserve_auctions,
+    count(*) FILTER (WHERE a.is_sold)::int AS sold_auctions,
+    count(*) FILTER (WHERE a.status <> 'canceled')::int AS completed_auctions`;
 
 const MARKETS_SQL = `
 WITH ${WINDOWS_CTE}, fam AS (
@@ -81,14 +87,15 @@ WITH ${WINDOWS_CTE}, fam AS (
     ORDER BY rank
     LIMIT $1
 ), info AS (
-    SELECT r.rank, r.make_key, r.model_family_key, r.is_new, mk.make_name,
+    SELECT r.rank, r.make_key, r.model_family_key, r.is_new, mk.make_name, mk.make_slug,
            min(m.model_family_name) AS family_name,
+           carsandbids.url_slug(min(m.model_family_name)) AS family_slug,
            coalesce(array_agg(m.model_generation ORDER BY m.model_generation)
                     FILTER (WHERE m.model_generation IS NOT NULL), '{}') AS generations
     FROM ranked r
     JOIN carsandbids.makes mk USING (make_key)
     JOIN carsandbids.models m USING (make_key, model_family_key)
-    GROUP BY r.rank, r.make_key, r.model_family_key, r.is_new, mk.make_name
+    GROUP BY r.rank, r.make_key, r.model_family_key, r.is_new, mk.make_name, mk.make_slug
 ), stats AS (
     SELECT a.make_key, a.model_family_key, w.w, ${WINDOW_STATS}
     FROM fam a
@@ -96,9 +103,9 @@ WITH ${WINDOWS_CTE}, fam AS (
     JOIN win w ON a.auction_end >= w.lo AND a.auction_end < w.hi
     GROUP BY a.make_key, a.model_family_key, w.w
 )
-SELECT i.rank, i.make_key, i.model_family_key, i.make_name, i.family_name,
-       i.generations, i.is_new, s.w, s.auctions, s.volume, s.p25, s.p50, s.p75,
-       s.no_reserve_auctions
+SELECT i.rank, i.make_key, i.model_family_key, i.make_name, i.make_slug, i.family_name,
+       i.family_slug, i.generations, i.is_new, s.w, s.auctions, s.volume, s.p25, s.p50, s.p75,
+       s.no_reserve_auctions, s.sold_auctions, s.completed_auctions
 FROM info i
 LEFT JOIN stats s USING (make_key, model_family_key)
 ORDER BY i.rank, s.w`;
@@ -112,7 +119,7 @@ LEFT JOIN carsandbids.auctions a ON a.auction_end >= w.lo AND a.auction_end < w.
 LEFT JOIN carsandbids.models m ON m.make_key = a.make_key AND m.model_key = a.model_key
 GROUP BY w.w`;
 
-type StatsRow = {
+export type StatsRow = {
   w: WindowKey | null;
   auctions: number;
   volume: number;
@@ -120,6 +127,8 @@ type StatsRow = {
   p50: number | null;
   p75: number | null;
   no_reserve_auctions: number;
+  sold_auctions: number;
+  completed_auctions: number;
 };
 
 const EMPTY_STATS: WindowStats = {
@@ -129,13 +138,15 @@ const EMPTY_STATS: WindowStats = {
   p50: null,
   p75: null,
   noReserveAuctions: 0,
+  soldAuctions: 0,
+  completedAuctions: 0,
 };
 
-function emptyWindows(): Record<WindowKey, WindowStats> {
+export function emptyWindows(): Record<WindowKey, WindowStats> {
   return { c365: { ...EMPTY_STATS }, p365: { ...EMPTY_STATS }, c180: { ...EMPTY_STATS }, p180: { ...EMPTY_STATS } };
 }
 
-function toStats(r: StatsRow): WindowStats {
+export function toStats(r: StatsRow): WindowStats {
   return {
     auctions: r.auctions,
     volume: r.volume,
@@ -143,6 +154,8 @@ function toStats(r: StatsRow): WindowStats {
     p50: r.p50,
     p75: r.p75,
     noReserveAuctions: r.no_reserve_auctions,
+    soldAuctions: r.sold_auctions,
+    completedAuctions: r.completed_auctions,
   };
 }
 
@@ -151,7 +164,9 @@ type MarketRow = StatsRow & {
   make_key: string;
   model_family_key: string;
   make_name: string;
+  make_slug: string;
   family_name: string;
+  family_slug: string;
   generations: string[];
   is_new: boolean;
 };
@@ -174,6 +189,8 @@ export async function getMarkets(limit: number | null): Promise<Market[]> {
         rank: r.rank,
         makeKey: r.make_key,
         familyKey: r.model_family_key,
+        makeSlug: r.make_slug,
+        familySlug: r.family_slug,
         makeName: r.make_name,
         familyName: r.family_name,
         generations: r.generations,
