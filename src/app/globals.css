@@ -30,6 +30,10 @@
   /* Range bars: the current window is the emphasized series, the year-ago comp is context. */
   --color-chart-current: #41a96d;
   --color-chart-prior: #5c6e64;
+
+  /* Auction scatter: sold auctions are solid dots, reserve-not-met auctions light rings. */
+  --color-chart-sold: #41a96d;
+  --color-chart-unsold: #b9ecca;
 }
 
 @theme inline {
