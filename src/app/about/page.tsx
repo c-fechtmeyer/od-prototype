@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { formatCount, formatDate } from "@/lib/format";
-import { getArchiveStatus } from "@/lib/markets";
+import { STALE_AFTER_DAYS, getArchiveStatus } from "@/lib/markets";
 
 export const metadata: Metadata = {
   title: "About · OD",
@@ -40,15 +40,24 @@ export default async function AboutPage() {
                 <span className="tabular-nums">{formatCount(status.totalAuctions)}</span>
               </Stat>
               <Stat label="Latest auctions through">{formatDate(status.latestAuctionEnd)}</Stat>
-              {/* The database only records runs that add auctions, so a quiet day can't be told from a
-                  stalled load. Status is shown as Synced rather than guessed from data age. */}
+              {/* Stale only once the latest auction is older than a normal Mon–Fri weekend gap. */}
               <Stat label="Status">
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-forest-900 px-2 py-0.5 text-xs font-medium text-forest-300">
-                  <span className="size-1.5 rounded-full bg-forest-400" aria-hidden="true" />
-                  Synced
-                </span>
+                {status.fresh ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-forest-900 px-2 py-0.5 text-xs font-medium text-forest-300">
+                    <span className="size-1.5 rounded-full bg-forest-400" aria-hidden="true" />
+                    Synced
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-3 px-2 py-0.5 text-xs font-medium text-down">
+                    <span className="size-1.5 rounded-full bg-down" aria-hidden="true" />
+                    Stale
+                  </span>
+                )}
               </Stat>
-              <p className="col-span-2 text-xs text-faint sm:col-span-4">Loaded daily · page refreshes hourly</p>
+              <p className="col-span-2 text-xs text-faint sm:col-span-4">
+                Loaded daily · page refreshes hourly
+                {!status.fresh && ` · no auctions have ended in the last ${STALE_AFTER_DAYS} days`}
+              </p>
             </dl>
           </Section>
 
