@@ -1,5 +1,14 @@
 # od-prototype
 
+**OverDrive** is pricing intelligence for the enthusiast car market. It turns a
+daily-updated archive of Cars & Bids auctions into market rankings, price trends and
+auction-by-auction charts you can dig into. Built by
+[Christian Fechtmeyer](https://www.linkedin.com/in/christianfechtmeyer/) to showcase
+applied data strategy, AI fluency and data product development. Every line of code
+was written by AI 🤖.
+
+**[Explore the live app →](https://overdrive-peach.vercel.app/)**
+
 A prototype UI over the Cars & Bids auction archive in Neon (the `carsandbids`
 schema, loaded daily by a separate scraper pipeline, `auct-scrape-and-load`, which
 is a private repo).
