@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
         loaders: ["@tailwindcss/turbopack"],
         as: "*.css",
       },
+      // Markdown imports as its raw text (the About page's copy, src/app/about/about.md).
+      "*.md": {
+        type: "text",
+      },
     },
   },
 };

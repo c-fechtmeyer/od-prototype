@@ -103,3 +103,6 @@ keys live in `src/lib/metrics.ts`.
   tokens hold ≥ 4.5:1 contrast on every surface.
 - **Metrics / columns:** add an entry to `METRICS` in `src/lib/metrics.ts`. Add
   any new column to the `WINDOW_STATS` SQL in `src/lib/markets.ts`.
+- **About page text:** lives in `src/app/about/about.md` as plain Markdown, so it can
+  be edited without touching code. The notes at the top of that file explain how it
+  maps onto the page.
