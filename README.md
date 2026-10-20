@@ -1,7 +1,8 @@
 # od-prototype
 
 A prototype UI over the Cars & Bids auction archive in Neon (the `carsandbids`
-schema, loaded daily by [auct-scrape-and-load](https://github.com/c-fechtmeyer/auct-scrape-and-load)).
+schema, loaded daily by a separate scraper pipeline, `auct-scrape-and-load`, which
+is a private repo).
 
 The homepage, **Home** ("OverDrive Market Intelligence"), ranks the 10 most-listed model families over the last
 365 days. Each row shows the last 365 and 180 days, each with a YoY comp against
@@ -48,7 +49,8 @@ be added there later.
 
 ## Run locally
 
-Requires Node 20.9+ (`.nvmrc` pins 22).
+Requires Node 22 (`.nvmrc` and `engines` in `package.json` pin it, so Vercel builds
+on the same version).
 
 ```bash
 cp .env.example .env.local   # then set DATABASE_URL

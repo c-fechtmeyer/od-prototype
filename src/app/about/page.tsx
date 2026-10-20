@@ -59,6 +59,9 @@ export default async function AboutPage() {
                 {!status.fresh && ` · no auctions have ended in the last ${STALE_AFTER_DAYS} days`}
               </p>
             </dl>
+            <p className="text-xs text-faint">
+              This is an independent project, not affiliated with or endorsed by Cars &amp; Bids
+            </p>
           </Section>
 
           <Section title="Creator" side="right">
