@@ -17,7 +17,7 @@ A prototype web app giving pricing intelligence for the enthusiast car market. I
 
 It is meant to be a demonstration of applied data strategy, AI fluency, as well as expertise in data product development.
 
-All code for this project was written by AI 🤖
+All code written by AI 🤖
 
 <!-- archive-stats -->
 
