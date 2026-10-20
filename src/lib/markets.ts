@@ -43,7 +43,6 @@ export type MarketSummary = {
 export type ArchiveStatus = {
   totalAuctions: number;
   latestAuctionEnd: number; // epoch ms
-  fresh: boolean; // an auction ended in the last 2 days, so the daily load is running
 };
 
 // Every window's stats are computed in one pass. The windows are anchored at now(),
@@ -229,9 +228,8 @@ export async function getArchiveStatus(): Promise<ArchiveStatus> {
 
   const [row] = (await sql.query(`
     SELECT count(*)::int AS total_auctions,
-           (extract(epoch FROM max(auction_end)) * 1000)::float8 AS latest_auction_end,
-           coalesce(max(auction_end) >= now() - interval '2 days', false) AS fresh
-    FROM carsandbids.auctions`)) as { total_auctions: number; latest_auction_end: number; fresh: boolean }[];
+           (extract(epoch FROM max(auction_end)) * 1000)::float8 AS latest_auction_end
+    FROM carsandbids.auctions`)) as { total_auctions: number; latest_auction_end: number }[];
 
-  return { totalAuctions: row.total_auctions, latestAuctionEnd: row.latest_auction_end, fresh: row.fresh };
+  return { totalAuctions: row.total_auctions, latestAuctionEnd: row.latest_auction_end };
 }
