@@ -43,7 +43,14 @@ export type MarketSummary = {
 export type ArchiveStatus = {
   totalAuctions: number;
   latestAuctionEnd: number; // epoch ms
+  fresh: boolean; // the latest auction ended within STALE_AFTER_DAYS
 };
+
+// Cars & Bids auctions end Monday to Friday, and the daily load picks up each day's
+// results the next morning (UTC). So Friday's auctions stay the latest until Tuesday's
+// load, about 3.7 days. The archive only counts as stale past that, at 4 days. A holiday
+// Monday can still trip it briefly.
+export const STALE_AFTER_DAYS = 4;
 
 // Every window's stats are computed in one pass. The windows are anchored at now(),
 // and the ranking is by listing count over the trailing 365 days.
@@ -228,8 +235,9 @@ export async function getArchiveStatus(): Promise<ArchiveStatus> {
 
   const [row] = (await sql.query(`
     SELECT count(*)::int AS total_auctions,
-           (extract(epoch FROM max(auction_end)) * 1000)::float8 AS latest_auction_end
-    FROM carsandbids.auctions`)) as { total_auctions: number; latest_auction_end: number }[];
+           (extract(epoch FROM max(auction_end)) * 1000)::float8 AS latest_auction_end,
+           coalesce(max(auction_end) >= now() - interval '${STALE_AFTER_DAYS} days', false) AS fresh
+    FROM carsandbids.auctions`)) as { total_auctions: number; latest_auction_end: number; fresh: boolean }[];
 
-  return { totalAuctions: row.total_auctions, latestAuctionEnd: row.latest_auction_end };
+  return { totalAuctions: row.total_auctions, latestAuctionEnd: row.latest_auction_end, fresh: row.fresh };
 }
