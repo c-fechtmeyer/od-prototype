@@ -152,6 +152,15 @@ export function emptyWindows(): Record<WindowKey, WindowStats> {
   return { c365: { ...EMPTY_STATS }, p365: { ...EMPTY_STATS }, c180: { ...EMPTY_STATS }, p180: { ...EMPTY_STATS } };
 }
 
+export function emptySummaryWindows(): Record<WindowKey, SummaryStats> {
+  return {
+    c365: { ...EMPTY_STATS, activeMarkets: 0 },
+    p365: { ...EMPTY_STATS, activeMarkets: 0 },
+    c180: { ...EMPTY_STATS, activeMarkets: 0 },
+    p180: { ...EMPTY_STATS, activeMarkets: 0 },
+  };
+}
+
 export function toStats(r: StatsRow): WindowStats {
   return {
     auctions: r.auctions,
@@ -217,14 +226,7 @@ export async function getMarketSummary(): Promise<MarketSummary> {
   cacheLife("hours");
 
   const summaryRows = (await sql.query(SUMMARY_SQL)) as (StatsRow & { active_markets: number })[];
-  const summary: MarketSummary = {
-    windows: {
-      c365: { ...EMPTY_STATS, activeMarkets: 0 },
-      p365: { ...EMPTY_STATS, activeMarkets: 0 },
-      c180: { ...EMPTY_STATS, activeMarkets: 0 },
-      p180: { ...EMPTY_STATS, activeMarkets: 0 },
-    },
-  };
+  const summary: MarketSummary = { windows: emptySummaryWindows() };
   for (const r of summaryRows) if (r.w) summary.windows[r.w] = { ...toStats(r), activeMarkets: r.active_markets };
   return summary;
 }

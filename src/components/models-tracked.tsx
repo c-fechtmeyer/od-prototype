@@ -1,9 +1,10 @@
 import { InfoTip } from "@/components/info-tip";
 import { formatCount } from "@/lib/format";
 
-// Header KPI on the Markets tab: how many model families the data covers, and how
-// many of them first appeared in the last 365 days.
-export function ModelsTracked({ total, added }: { total: number; added: number }) {
+// Header KPI on the Markets tab and make pages: how many model families the data
+// covers (of one make, when makeName is set), and how many of them first appeared
+// in the last 365 days.
+export function ModelsTracked({ total, added, makeName }: { total: number; added: number; makeName?: string }) {
   return (
     <div className="w-full rounded-xl border border-line bg-surface/80 px-4 py-3.5 sm:w-auto sm:min-w-[260px]">
       <div className="mb-1.5 text-xs font-medium text-muted">
@@ -11,7 +12,8 @@ export function ModelsTracked({ total, added }: { total: number; added: number }
         <span className="whitespace-nowrap">
           Tracked
           <InfoTip id="models-tracked-def" label="Models Tracked" className="ml-1.5 align-[-3px]">
-            Model families with at least one observed auction on Cars &amp; Bids.
+            {makeName ? `${makeName} model families` : "Model families"} with at least one observed auction on Cars
+            &amp; Bids.
             <span className="mt-1.5 block text-faint">
               New models are families whose first observed auction ended in the last 365 days.
             </span>

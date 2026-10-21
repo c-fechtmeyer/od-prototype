@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Delta } from "@/components/delta";
+import { InfoTip } from "@/components/info-tip";
 import { RangeBar } from "@/components/range-bar";
 import {
   DEFAULT_SORT,
   FamilyLink,
+  MakeLink,
   MetricHeader,
   MetricValue,
   Monogram,
@@ -25,7 +27,7 @@ import {
   sortRows,
   useRowClick,
 } from "@/components/table-parts";
-import { INSUFFICIENT } from "@/lib/format";
+import { INSUFFICIENT, formatCount } from "@/lib/format";
 import type { Market, WindowKey } from "@/lib/markets";
 import { METRICS, type Metric } from "@/lib/metrics";
 import type { LogScale } from "@/lib/scale";
@@ -37,7 +39,17 @@ const WINDOWS = {
 type WindowLabel = keyof typeof WINDOWS;
 
 // The Markets tab: every family, one compact line each, for one window at a time.
-export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogScale }) {
+// On a make's page (`make` set) it lists just that make's families, still with their
+// rank among all families, so the # column is labelled as the overall rank.
+export function MarketsList({
+  markets,
+  scale,
+  make,
+}: {
+  markets: Market[];
+  scale: LogScale;
+  make?: { name: string; totalMarkets: number };
+}) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const [windowLabel, setWindowLabel] = useState<WindowLabel>("365D");
@@ -70,7 +82,7 @@ export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogS
   };
 
   return (
-    <section aria-label="All markets">
+    <section aria-label={make ? `${make.name} models` : "All markets"}>
       {/* Toolbar. Room is left here for the filters to come. */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchBox value={query} onChange={reset(setQuery)} />
@@ -100,10 +112,19 @@ export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogS
         <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-sm">
           <thead>
             <tr className="text-left text-[13px] text-muted">
-              <th scope="col" className="w-16 border-b border-line py-3 pl-5 align-bottom font-medium">
+              <th
+                scope="col"
+                className={`${make ? "w-36" : "w-16"} border-b border-line py-3 pl-5 align-bottom font-medium`}
+              >
                 <SortButton active={sort.key === "rank"} dir={sort.dir} onClick={() => onSort("rank")}>
-                  #
+                  {make ? "Overall Rank" : "#"}
                 </SortButton>
+                {make && (
+                  <InfoTip id="overall-rank-def" label="Overall Rank" className="ml-1.5 align-[-3px]">
+                    Each model&apos;s rank among all {formatCount(make.totalMarkets)} models on the Markets tab, by
+                    listings over the last 365 days. It isn&apos;t a rank among {make.name} models only.
+                  </InfoTip>
+                )}
               </th>
               <th
                 scope="col"
@@ -129,10 +150,11 @@ export function MarketsList({ markets, scale }: { markets: Market[]; scale: LogS
                 <tr key={m.familyId} className="group cursor-pointer" onClick={onRowClick(familyHref(m))}>
                   <td className={`${cell} pl-5 text-[13px] text-faint tabular-nums`}>{m.rank}</td>
                   <th scope="row" className={`${cell} sticky left-0 z-10 pr-4 text-left font-normal sm:static`}>
+                    {/* On a make's page every row has the same make, so it isn't repeated. */}
                     <div className="flex items-center gap-2.5 whitespace-nowrap">
-                      <Monogram make={m.makeName} size="sm" />
+                      {!make && <Monogram make={m.makeName} size="sm" />}
                       <FamilyLink href={familyHref(m)}>{m.familyName}</FamilyLink>
-                      <span className="text-[13px] text-muted">{m.makeName}</span>
+                      {!make && <MakeLink market={m} />}
                       {m.generations.length > 0 && (
                         <span className="text-xs text-faint" title={m.generations.join(", ")}>
                           · {m.generations.length} gen{m.generations.length > 1 ? "s" : ""}

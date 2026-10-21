@@ -16,19 +16,28 @@ type Tile<S extends WindowStats> = {
 const PRICE_DEFINITION =
   "The middle 50% of sale prices: 25th to 75th percentile of sold auctions, reserve and no-reserve. YoY is the change in the median sale price.";
 
+const ACTIVE_MARKETS: Omit<Tile<SummaryStats>, "definition"> = {
+  key: "active",
+  label: "Active Markets",
+  format: (s) => formatCount(s.activeMarkets),
+  delta: (c, p) => pctChange(c.activeMarkets, p.activeMarkets),
+  deltaKind: "pct",
+};
+
 // Home: every Cars & Bids auction, not just the families in the table.
 const SUMMARY_TILES: Tile<SummaryStats>[] = [
   { ...METRICS.auctions, definition: "Every Cars & Bids listing that ended in the window, including canceled auctions." },
   { ...METRICS.volume, definition: "Total sale amount of auctions that sold in the window, including sold-after deals." },
   { ...METRICS.price, definition: PRICE_DEFINITION },
-  {
-    key: "active",
-    label: "Active Markets",
-    definition: "Model families with at least one auction that ended in the window.",
-    format: (s) => formatCount(s.activeMarkets),
-    delta: (c, p) => pctChange(c.activeMarkets, p.activeMarkets),
-    deltaKind: "pct",
-  },
+  { ...ACTIVE_MARKETS, definition: "Model families with at least one auction that ended in the window." },
+];
+
+// Make page: the Home tiles, scoped to one make.
+export const MAKE_TILES: Tile<SummaryStats>[] = [
+  { ...METRICS.auctions, definition: "Every listing of this make that ended in the window, including canceled auctions." },
+  { ...METRICS.volume, definition: "Total sale amount of this make's auctions that sold in the window, including sold-after deals." },
+  { ...METRICS.price, definition: PRICE_DEFINITION },
+  { ...ACTIVE_MARKETS, definition: "This make's model families with at least one auction that ended in the window." },
 ];
 
 // Model page: the same first three tiles, scoped to one family, plus sell-through.

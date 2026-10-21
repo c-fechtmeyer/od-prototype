@@ -7,6 +7,7 @@ import { RangeBar } from "@/components/range-bar";
 import {
   DEFAULT_SORT,
   FamilyLink,
+  MakeLink,
   MetricHeader,
   Monogram,
   PriceLegend,
@@ -127,7 +128,7 @@ function MarketRow({ market: m, scale, striped }: { market: Market; scale: LogSc
               <FamilyLink href={href} className="text-[15px]">
                 {m.familyName}
               </FamilyLink>
-              <span className="text-[13px] text-muted">{m.makeName}</span>
+              <MakeLink market={m} />
             </div>
             {m.generations.length > 0 && (
               <div className="mt-0.5 text-xs whitespace-nowrap text-faint" title={m.generations.join(", ")}>
