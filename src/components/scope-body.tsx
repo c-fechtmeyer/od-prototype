@@ -2,12 +2,14 @@ import { AuctionResults } from "@/components/auction-results";
 import { AuctionScatter } from "@/components/auction-scatter";
 import { PriceByColor } from "@/components/price-by-color";
 import { PriceDistribution } from "@/components/price-distribution";
+import { SameVinSales } from "@/components/same-vin-sales";
 import { FAMILY_TILES, KpiTiles } from "@/components/summary-tiles";
 import type { FamilyPage } from "@/lib/family";
 import { formatCount } from "@/lib/format";
 
 // The body of a family page or generation sub-page: a summary line, KPI tiles,
-// the auction results scatter and the latest results table, all for one scope.
+// the auction results scatter, the price charts, same-VIN sales and the latest
+// results table, all for one scope.
 export function ScopeBody({ data }: { data: FamilyPage }) {
   const { nav, generation, auctions } = data;
   const oldest = auctions.at(-1);
@@ -38,6 +40,10 @@ export function ScopeBody({ data }: { data: FamilyPage }) {
         <div className="lg:col-span-2">
           <PriceByColor auctions={auctions} />
         </div>
+      </div>
+
+      <div className="mt-6">
+        <SameVinSales auctions={auctions} />
       </div>
 
       <div className="mt-10">

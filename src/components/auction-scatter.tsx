@@ -11,7 +11,7 @@ import {
   matches,
 } from "@/components/scatter-filters";
 import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
-import { logPriceTicks, priceTickLabel } from "@/lib/chart";
+import { logPriceTicks, priceTickLabel, timeTicks } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
 import { formatCount, formatDate, formatDollars } from "@/lib/format";
 
@@ -291,26 +291,4 @@ function layout(points: Point[], width: number) {
     yTicks: logPriceTicks(10 ** lo, 10 ** hi).map((v) => ({ v, y: y(v) })),
     xTicks: timeTicks(t0, t1, plotW).map((t) => ({ ...t, x: x(t.v) })),
   };
-}
-
-// Year boundaries for long spans; quarter starts when there's less than ~2 years.
-function timeTicks(t0: number, t1: number, plotW: number): { v: number; label: string }[] {
-  const start = new Date(t0);
-  const spanYears = (t1 - t0) / (365.25 * 86_400_000);
-  const ticks: { v: number; label: string }[] = [];
-  if (spanYears >= 2) {
-    const every = plotW / spanYears < 48 ? 2 : 1;
-    for (let yr = start.getUTCFullYear() + 1; Date.UTC(yr, 0, 1) <= t1; yr++) {
-      if ((yr - start.getUTCFullYear() - 1) % every === 0) ticks.push({ v: Date.UTC(yr, 0, 1), label: String(yr) });
-    }
-  } else {
-    const d = new Date(Date.UTC(start.getUTCFullYear(), Math.floor(start.getUTCMonth() / 3) * 3 + 3, 1));
-    for (; d.getTime() <= t1; d.setUTCMonth(d.getUTCMonth() + 3)) {
-      ticks.push({
-        v: d.getTime(),
-        label: d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }),
-      });
-    }
-  }
-  return ticks;
 }

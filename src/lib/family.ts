@@ -40,6 +40,7 @@ export type AuctionStatus = "sold" | "sold_after" | "reserve_not_met" | "cancele
 
 export type FamilyAuction = {
   id: string; // Cars & Bids auction id: carsandbids.com/auctions/{id}
+  vin: string | null; // auctions.vin_key: the cleaned VIN, shared by every listing of one car
   ended: number; // epoch ms
   title: string | null;
   subTitle: string | null;
@@ -168,7 +169,7 @@ export async function getFamilyPage(
       params,
     ),
     sql.query(
-      `SELECT a.id, (extract(epoch FROM a.auction_end) * 1000)::float8 AS ended, a.title, a.sub_title,
+      `SELECT a.id, a.vin_key AS vin, (extract(epoch FROM a.auction_end) * 1000)::float8 AS ended, a.title, a.sub_title,
               a.model_generation AS generation, a.mileage, a.year, a.status, a.no_reserve, a.sale_amount,
               a.current_bid_amount, a.bids, a.exterior_color,
               bs.body_style_name AS body_style, tr.transmission_name AS transmission,
@@ -186,6 +187,7 @@ export async function getFamilyPage(
     StatsRow[],
     {
       id: string;
+      vin: string | null;
       ended: number;
       title: string | null;
       sub_title: string | null;
@@ -215,6 +217,7 @@ export async function getFamilyPage(
     windows,
     auctions: auctionRows.map((r) => ({
       id: r.id,
+      vin: r.vin,
       ended: r.ended,
       title: r.title,
       subTitle: r.sub_title,
