@@ -10,6 +10,7 @@ import {
   isFiltered,
   matches,
 } from "@/components/scatter-filters";
+import { Segmented } from "@/components/table-parts";
 import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
 import { logPriceTicks, priceTickLabel, timeTicks } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
@@ -24,18 +25,37 @@ const SOLD_OPACITY = 0.6;
 const UNSOLD_OPACITY = 0.55;
 // Auctions outside the filters stay on the chart, barely visible, and don't respond to hover.
 const FILTERED_OUT_OPACITY = 0.08;
+// Calendar years alternate between a faint wash and none.
+const YEAR_BAND_OPACITY = 0.03;
+const DAY = 86_400_000;
+
+// Date ranges, in years back from when the data was loaded (null: all time).
+const RANGE_YEARS = { "All Time": null, "5 Years": 5, "3 Years": 3, "1 Year": 1 } as const;
+type Range = keyof typeof RANGE_YEARS;
+const RANGES = Object.keys(RANGE_YEARS) as Range[];
+
+function rangeStart(range: Range, asOf: number): number {
+  const years = RANGE_YEARS[range];
+  if (years == null) return -Infinity;
+  const d = new Date(asOf);
+  d.setUTCFullYear(d.getUTCFullYear() - years);
+  return d.getTime();
+}
 
 type Point = { a: FamilyAuction; t: number; price: number; sold: boolean; isHighBid: boolean };
 
 // One dot per auction: when it ended (x) against its result price (y, log scale).
 // Sold auctions are solid; reserve-not-met auctions are light rings. Canceled
 // auctions have no result, so they're counted in the legend but not plotted. The
-// filters above the plot fade out the auctions they exclude.
-export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
+// filters above the plot fade out the auctions they exclude; the date range below
+// them sets the time axis, and only auctions inside it are plotted or counted.
+export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; asOf: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [range, setRange] = useState<Range>("3 Years");
+  const since = rangeStart(range, asOf);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -45,22 +65,25 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
     return () => ro.disconnect();
   }, []);
 
-  const { points, canceled } = useMemo(() => {
-    const points: Point[] = [];
-    let canceled = 0;
+  // Every auction with a result to plot, over all time. The filter options come from
+  // these, so they stay put when the date range changes.
+  const plottable = useMemo(() => {
+    const out: Point[] = [];
     for (const a of auctions) {
-      if (a.status === "canceled") {
-        canceled++;
-        continue;
-      }
+      if (a.status === "canceled") continue;
       const { price, isHighBid } = resultPrice(a);
       if (price == null || price <= 0) continue;
-      points.push({ a, t: a.ended, price, sold: isSold(a), isHighBid });
+      out.push({ a, t: a.ended, price, sold: isSold(a), isHighBid });
     }
-    return { points, canceled };
+    return out;
   }, [auctions]);
+  const points = useMemo(() => plottable.filter((p) => p.t >= since), [plottable, since]);
+  const canceled = useMemo(
+    () => auctions.filter((a) => a.status === "canceled" && a.ended >= since).length,
+    [auctions, since],
+  );
 
-  const options = useMemo(() => buildOptions(points.map((p) => p.a)), [points]);
+  const options = useMemo(() => buildOptions(plottable.map((p) => p.a)), [plottable]);
   // Every auction the filters select, canceled ones included, for the stats under the chart.
   const selected = useMemo(() => auctions.filter((a) => matches(a, filters)), [auctions, filters]);
   const inFilter = useMemo(() => points.map((p) => matches(p.a, filters)), [points, filters]);
@@ -68,7 +91,10 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
   const sold = points.filter((p, i) => p.sold && inFilter[i]).length;
   const unsold = shown - sold;
 
-  const chart = useMemo(() => (width > 0 && points.length ? layout(points, width) : null), [points, width]);
+  const chart = useMemo(
+    () => (width > 0 && points.length ? layout(points, width, since, asOf) : null),
+    [points, width, since, asOf],
+  );
 
   // The dot layer changes with the data, width or filters, not on every hover.
   // Filtered-out dots draw first, so the ones in view always sit on top.
@@ -152,19 +178,35 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
         </div>
       </div>
 
-      {points.length > 0 && (
-        <ScatterFilters
-          options={options}
-          filters={filters}
-          onChange={setFilters}
-          shown={shown}
-          total={points.length}
-        />
+      {plottable.length > 0 && (
+        <>
+          <ScatterFilters
+            options={options}
+            filters={filters}
+            onChange={setFilters}
+            shown={shown}
+            total={points.length}
+          />
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-[11px] font-medium text-muted">Date Range</span>
+            <Segmented
+              label="Date range"
+              options={RANGES}
+              value={range}
+              onChange={(r) => {
+                setRange(r);
+                setHover(null); // hover indexes into the points in range
+              }}
+            />
+          </div>
+        </>
       )}
 
       <div ref={wrapRef} className="relative" style={{ height: HEIGHT }}>
         {points.length === 0 && (
-          <p className="grid h-full place-items-center text-sm text-faint">No auction results to plot yet.</p>
+          <p className="grid h-full place-items-center text-sm text-faint">
+            {plottable.length ? "No auction results in this date range." : "No auction results to plot yet."}
+          </p>
         )}
         {chart && (
           <svg
@@ -185,6 +227,18 @@ export function AuctionScatter({ auctions }: { auctions: FamilyAuction[] }) {
             }}
             style={{ cursor: hover != null ? "pointer" : "default" }}
           >
+            {chart.yearBands.map((b) => (
+              <rect
+                key={b.year}
+                x={b.x0}
+                y={MARGIN.top}
+                width={b.x1 - b.x0}
+                height={HEIGHT - MARGIN.top - MARGIN.bottom}
+                className="fill-fg"
+                fillOpacity={YEAR_BAND_OPACITY}
+              />
+            ))}
+
             {/* Grid and axes: solid hairlines, one step off the surface. */}
             {chart.yTicks.map((t) => (
               <g key={`y${t.v}`}>
@@ -266,16 +320,18 @@ function Tooltip({ point: p, x, y, width }: { point: Point; x: number; y: number
   );
 }
 
-// Scales, ticks, and every dot's screen position for the current width.
-function layout(points: Point[], width: number) {
+// Scales, ticks, year bands, and every dot's screen position for the current width.
+// The time axis runs from the start of the date range (or just before the first
+// auction, if that's later) to just past when the data was loaded.
+function layout(points: Point[], width: number, since: number, asOf: number) {
   const plotW = Math.max(1, width - MARGIN.left - MARGIN.right);
   const plotH = HEIGHT - MARGIN.top - MARGIN.bottom;
 
-  let t0 = Math.min(...points.map((p) => p.t));
-  let t1 = Math.max(...points.map((p) => p.t));
-  const tPad = Math.max((t1 - t0) * 0.02, 15 * 86_400_000);
-  t0 -= tPad;
-  t1 += tPad;
+  const first = Math.min(...points.map((p) => p.t));
+  const last = Math.max(asOf, ...points.map((p) => p.t));
+  const tPad = Math.max((last - Math.max(first, since)) * 0.02, 15 * DAY);
+  const t0 = Math.max(since, first - tPad);
+  const t1 = last + tPad;
 
   let lo = Math.log10(Math.min(...points.map((p) => p.price)));
   let hi = Math.log10(Math.max(...points.map((p) => p.price)));
@@ -286,8 +342,16 @@ function layout(points: Point[], width: number) {
   const x = (t: number) => MARGIN.left + ((t - t0) / (t1 - t0)) * plotW;
   const y = (v: number) => MARGIN.top + (1 - (Math.log10(v) - lo) / (hi - lo)) * plotH;
 
+  // Even years get the wash, so a year keeps its shade whatever the range.
+  const yearBands: { year: number; x0: number; x1: number }[] = [];
+  for (let yr = new Date(t0).getUTCFullYear(); Date.UTC(yr, 0, 1) < t1; yr++) {
+    if (yr % 2) continue;
+    yearBands.push({ year: yr, x0: x(Math.max(t0, Date.UTC(yr, 0, 1))), x1: x(Math.min(t1, Date.UTC(yr + 1, 0, 1))) });
+  }
+
   return {
     xy: points.map((p) => [x(p.t), y(p.price)] as const),
+    yearBands,
     yTicks: logPriceTicks(10 ** lo, 10 ** hi).map((v) => ({ v, y: y(v) })),
     xTicks: timeTicks(t0, t1, plotW).map((t) => ({ ...t, x: x(t.v) })),
   };
