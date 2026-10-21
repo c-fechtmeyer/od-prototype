@@ -10,6 +10,7 @@ import type { LogScale } from "@/lib/scale";
 export type Sort = { key: "rank" | MetricKey; dir: "asc" | "desc" };
 
 export const familyHref = (m: { makeSlug: string; familySlug: string }) => `/markets/${m.makeSlug}/${m.familySlug}`;
+export const makeHref = (m: { makeSlug: string }) => `/markets/${m.makeSlug}`;
 
 // Clicking anywhere on a row opens the family's page. The name link inside the row
 // stays the real (keyboard and screen-reader) target; clicks on links, buttons, or
@@ -32,6 +33,21 @@ export function FamilyLink({ href, children, className = "" }: { href: string; c
       className={`font-semibold text-fg decoration-forest-600 underline-offset-4 hover:underline ${className}`}
     >
       {children}
+    </Link>
+  );
+}
+
+// The make name beside a family's, linked to the make's page. A click on it opens
+// the make, not the row's family (useRowClick leaves links alone). Not prefetched,
+// like FamilyLink, so a page of rows doesn't fetch a page per make.
+export function MakeLink({ market }: { market: { makeSlug: string; makeName: string } }) {
+  return (
+    <Link
+      href={makeHref(market)}
+      prefetch={false}
+      className="text-[13px] text-muted decoration-line-strong underline-offset-4 hover:text-fg hover:underline"
+    >
+      {market.makeName}
     </Link>
   );
 }

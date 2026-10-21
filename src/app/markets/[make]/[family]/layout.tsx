@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { BackLink } from "@/components/back-link";
 import { GenerationTabs } from "@/components/generation-tabs";
 import { getFamilyNav } from "@/lib/family";
 
@@ -10,12 +11,7 @@ import { getFamilyNav } from "@/lib/family";
 export default function FamilyLayout({ params, children }: LayoutProps<"/markets/[make]/[family]">) {
   return (
     <main className="mx-auto w-full max-w-[1480px] flex-1 px-4 pt-6 pb-16 sm:px-6 lg:px-8">
-      <Link href="/markets" className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg">
-        <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-          <path d="M10 3 5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        Markets
-      </Link>
+      <BackLink href="/markets">Markets</BackLink>
       {/* params is awaited inside the boundary, so unlisted families still get an instant shell. */}
       <Suspense fallback={<HeaderSkeleton />}>
         <FamilyHeader params={params} />
@@ -34,7 +30,12 @@ async function FamilyHeader({ params }: { params: LayoutProps<"/markets/[make]/[
     <div className="pt-3">
       <h1 className="flex flex-wrap items-baseline gap-x-3 text-[28px] font-semibold tracking-tight">
         {nav.familyName}
-        <span className="text-lg font-normal text-muted">{nav.makeName}</span>
+        <Link
+          href={`/markets/${nav.makeSlug}`}
+          className="text-lg font-normal text-muted decoration-line-strong underline-offset-4 hover:text-fg hover:underline"
+        >
+          {nav.makeName}
+        </Link>
       </h1>
       {nav.generations.length > 0 && <GenerationTabs nav={nav} />}
     </div>

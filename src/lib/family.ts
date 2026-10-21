@@ -12,14 +12,19 @@ import {
   toStats,
 } from "./markets";
 
-// Which auctions a page covers: a model family, optionally narrowed to one of its
-// generations. Finer cuts (trim, ...) can be added here once the taxonomy supports
-// them; every query below filters through scopeFilter().
-export type MarketScope = { makeKey: string; familyKey: string; generation: string | null };
+// Which auctions a page covers: a make, optionally narrowed to one model family and
+// then to one of its generations. Finer cuts (trim, ...) can be added here once the
+// taxonomy supports them; every scoped query filters through scopeFilter().
+export type MarketScope = { makeKey: string; familyKey: string | null; generation: string | null };
 
-function scopeFilter(s: MarketScope): { where: string; params: string[] } {
-  const where = ["a.make_key = $1", "m.model_family_key = $2"];
-  const params = [s.makeKey, s.familyKey];
+// Expects auctions as `a` joined to their models as `m`.
+export function scopeFilter(s: MarketScope): { where: string; params: string[] } {
+  const where = ["a.make_key = $1"];
+  const params = [s.makeKey];
+  if (s.familyKey != null) {
+    params.push(s.familyKey);
+    where.push(`m.model_family_key = $${params.length}`);
+  }
   if (s.generation != null) {
     params.push(s.generation);
     where.push(`m.model_generation = $${params.length}`);

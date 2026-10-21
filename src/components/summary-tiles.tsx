@@ -11,25 +11,47 @@ type Tile<S extends WindowStats> = {
   format: (s: S) => string;
   delta: (cur: S, prior: S) => number | null;
   deltaKind: "pct" | "pp";
+  context?: string; // right of the 365D value, e.g. "of 48 tracked"
+  badge?: string; // a pill at the end of the 180D line, e.g. "+3 new"
 };
 
 const PRICE_DEFINITION =
   "The middle 50% of sale prices: 25th to 75th percentile of sold auctions, reserve and no-reserve. YoY is the change in the median sale price.";
 
-// Home: every Cars & Bids auction, not just the families in the table.
-const SUMMARY_TILES: Tile<SummaryStats>[] = [
-  { ...METRICS.auctions, definition: "Every Cars & Bids listing that ended in the window, including canceled auctions." },
-  { ...METRICS.volume, definition: "Total sale amount of auctions that sold in the window, including sold-after deals." },
-  { ...METRICS.price, definition: PRICE_DEFINITION },
-  {
+// Families active in the window, beside how many are tracked at all (any observed
+// auction) and how many of those are new. `families` says whose, for the definition.
+function activeMarkets(families: string, tracked: number, added: number): Tile<SummaryStats> {
+  return {
     key: "active",
     label: "Active Markets",
-    definition: "Model families with at least one auction that ended in the window.",
+    definition: `${families} with at least one auction that ended in the window, out of the ${formatCount(tracked)} with any observed auction on Cars & Bids. New models are families whose first observed auction ended in the last 365 days.`,
     format: (s) => formatCount(s.activeMarkets),
     delta: (c, p) => pctChange(c.activeMarkets, p.activeMarkets),
     deltaKind: "pct",
-  },
-];
+    context: `of ${formatCount(tracked)} tracked`,
+    badge: added > 0 ? `+${formatCount(added)} new` : undefined,
+  };
+}
+
+// Home: every Cars & Bids auction, not just the families in the table.
+function summaryTiles(tracked: number, added: number): Tile<SummaryStats>[] {
+  return [
+    { ...METRICS.auctions, definition: "Every Cars & Bids listing that ended in the window, including canceled auctions." },
+    { ...METRICS.volume, definition: "Total sale amount of auctions that sold in the window, including sold-after deals." },
+    { ...METRICS.price, definition: PRICE_DEFINITION },
+    activeMarkets("Model families", tracked, added),
+  ];
+}
+
+// Make page: the Home tiles, scoped to one make.
+export function makeTiles(tracked: number, added: number): Tile<SummaryStats>[] {
+  return [
+    { ...METRICS.auctions, definition: "Every listing of this make that ended in the window, including canceled auctions." },
+    { ...METRICS.volume, definition: "Total sale amount of this make's auctions that sold in the window, including sold-after deals." },
+    { ...METRICS.price, definition: PRICE_DEFINITION },
+    activeMarkets("This make's model families", tracked, added),
+  ];
+}
 
 // Model page: the same first three tiles, scoped to one family, plus sell-through.
 export const FAMILY_TILES: Tile<WindowStats>[] = [
@@ -43,8 +65,9 @@ export const FAMILY_TILES: Tile<WindowStats>[] = [
   },
 ];
 
-export function SummaryTiles({ summary }: { summary: MarketSummary }) {
-  return <KpiTiles label="All Cars & Bids auctions" tiles={SUMMARY_TILES} windows={summary.windows} />;
+// `tracked`: every family with any observed auction; `added`: the new ones among them.
+export function SummaryTiles({ summary, tracked, added }: { summary: MarketSummary; tracked: number; added: number }) {
+  return <KpiTiles label="All Cars & Bids auctions" tiles={summaryTiles(tracked, added)} windows={summary.windows} />;
 }
 
 export function KpiTiles<S extends WindowStats>({
@@ -88,6 +111,7 @@ export function KpiTiles<S extends WindowStats>({
                   <Delta value={m.delta(c365, p365)} kind={m.deltaKind} className="text-sm font-medium" />
                 </>
               )}
+              {m.context && <span className="ml-auto text-xs whitespace-nowrap text-muted tabular-nums">{m.context}</span>}
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs whitespace-nowrap text-muted">
               <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-faint">
@@ -100,6 +124,11 @@ export function KpiTiles<S extends WindowStats>({
                   <span className="tabular-nums">{m.format(c180)}</span>
                   <Delta value={m.delta(c180, p180)} kind={m.deltaKind} />
                 </>
+              )}
+              {m.badge && (
+                <span className="ml-auto rounded bg-forest-900 px-1.5 py-0.5 font-medium text-forest-300 tabular-nums">
+                  {m.badge}
+                </span>
               )}
             </div>
           </div>
