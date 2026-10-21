@@ -18,6 +18,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "OverDrive Market Intelligence",
   description: "Collector-car auction markets, built on Cars & Bids results.",
+  // The preview image itself is opengraph-image.tsx; og:title follows each page's title.
+  openGraph: { siteName: "OverDrive Market Intelligence", type: "website" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
