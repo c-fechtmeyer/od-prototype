@@ -18,35 +18,38 @@ type Tile<S extends WindowStats> = {
 const PRICE_DEFINITION =
   "The middle 50% of sale prices: 25th to 75th percentile of sold auctions, reserve and no-reserve. YoY is the change in the median sale price.";
 
-const ACTIVE_MARKETS: Omit<Tile<SummaryStats>, "definition"> = {
-  key: "active",
-  label: "Active Markets",
-  format: (s) => formatCount(s.activeMarkets),
-  delta: (c, p) => pctChange(c.activeMarkets, p.activeMarkets),
-  deltaKind: "pct",
-};
+// Families active in the window, beside how many are tracked at all (any observed
+// auction) and how many of those are new. `families` says whose, for the definition.
+function activeMarkets(families: string, tracked: number, added: number): Tile<SummaryStats> {
+  return {
+    key: "active",
+    label: "Active Markets",
+    definition: `${families} with at least one auction that ended in the window, out of the ${formatCount(tracked)} with any observed auction on Cars & Bids. New models are families whose first observed auction ended in the last 365 days.`,
+    format: (s) => formatCount(s.activeMarkets),
+    delta: (c, p) => pctChange(c.activeMarkets, p.activeMarkets),
+    deltaKind: "pct",
+    context: `of ${formatCount(tracked)} tracked`,
+    badge: added > 0 ? `+${formatCount(added)} new` : undefined,
+  };
+}
 
 // Home: every Cars & Bids auction, not just the families in the table.
-const SUMMARY_TILES: Tile<SummaryStats>[] = [
-  { ...METRICS.auctions, definition: "Every Cars & Bids listing that ended in the window, including canceled auctions." },
-  { ...METRICS.volume, definition: "Total sale amount of auctions that sold in the window, including sold-after deals." },
-  { ...METRICS.price, definition: PRICE_DEFINITION },
-  { ...ACTIVE_MARKETS, definition: "Model families with at least one auction that ended in the window." },
-];
+function summaryTiles(tracked: number, added: number): Tile<SummaryStats>[] {
+  return [
+    { ...METRICS.auctions, definition: "Every Cars & Bids listing that ended in the window, including canceled auctions." },
+    { ...METRICS.volume, definition: "Total sale amount of auctions that sold in the window, including sold-after deals." },
+    { ...METRICS.price, definition: PRICE_DEFINITION },
+    activeMarkets("Model families", tracked, added),
+  ];
+}
 
-// Make page: the Home tiles, scoped to one make. Active Markets also carries how many
-// of the make's families are tracked at all (`tracked`) and how many of those are new.
+// Make page: the Home tiles, scoped to one make.
 export function makeTiles(tracked: number, added: number): Tile<SummaryStats>[] {
   return [
     { ...METRICS.auctions, definition: "Every listing of this make that ended in the window, including canceled auctions." },
     { ...METRICS.volume, definition: "Total sale amount of this make's auctions that sold in the window, including sold-after deals." },
     { ...METRICS.price, definition: PRICE_DEFINITION },
-    {
-      ...ACTIVE_MARKETS,
-      definition: `This make's model families with at least one auction that ended in the window, out of the ${formatCount(tracked)} with any observed auction on Cars & Bids. New models are families whose first observed auction ended in the last 365 days.`,
-      context: `of ${formatCount(tracked)} tracked`,
-      badge: added > 0 ? `+${formatCount(added)} new` : undefined,
-    },
+    activeMarkets("This make's model families", tracked, added),
   ];
 }
 
@@ -62,8 +65,9 @@ export const FAMILY_TILES: Tile<WindowStats>[] = [
   },
 ];
 
-export function SummaryTiles({ summary }: { summary: MarketSummary }) {
-  return <KpiTiles label="All Cars & Bids auctions" tiles={SUMMARY_TILES} windows={summary.windows} />;
+// `tracked`: every family with any observed auction; `added`: the new ones among them.
+export function SummaryTiles({ summary, tracked, added }: { summary: MarketSummary; tracked: number; added: number }) {
+  return <KpiTiles label="All Cars & Bids auctions" tiles={summaryTiles(tracked, added)} windows={summary.windows} />;
 }
 
 export function KpiTiles<S extends WindowStats>({

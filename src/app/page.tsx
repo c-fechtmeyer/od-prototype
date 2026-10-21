@@ -6,7 +6,9 @@ import { logScale } from "@/lib/scale";
 const TOP_N = 10;
 
 export default async function HomePage() {
-  const [markets, summary] = await Promise.all([getMarkets(TOP_N), getMarketSummary()]);
+  // The Markets tab's full (cached) list: the tiles count all of it, the table shows its top.
+  const [allMarkets, summary] = await Promise.all([getMarkets(null), getMarketSummary()]);
+  const markets = allMarkets.slice(0, TOP_N);
 
   const scale = logScale(
     markets.flatMap((m) => Object.values(m.windows).flatMap((w) => [w.p25 ?? NaN, w.p75 ?? NaN])),
@@ -35,7 +37,11 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <SummaryTiles summary={summary} />
+      <SummaryTiles
+        summary={summary}
+        tracked={allMarkets.length}
+        added={allMarkets.filter((m) => m.isNew).length}
+      />
       <MarketsTable markets={markets} scale={scale} />
 
     </main>
