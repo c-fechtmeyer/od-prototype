@@ -21,6 +21,9 @@ const HEIGHT = 380;
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 56 };
 const R = 4; // >= 8px markers
 const HIT = 14; // hover radius, larger than the mark
+// How far above or below a trend line still counts as on it: about its casing, wider for a finger.
+const LINE_HIT = 5;
+const LINE_HIT_TOUCH = 12;
 // Partly transparent, so clusters build up darker where auctions overlap.
 const SOLD_OPACITY = 0.6;
 const UNSOLD_OPACITY = 0.55;
@@ -46,6 +49,8 @@ function rangeStart(range: Range, asOf: number): number {
 }
 
 type Point = { a: FamilyAuction; t: number; price: number; sold: boolean; isHighBid: boolean };
+// What's under the pointer: an auction's dot, or a trend line at a month start.
+type Hover = { kind: "dot"; i: number } | { kind: "month"; t: number } | null;
 
 // One dot per auction: when it ended (x) against its result price (y, log scale).
 // Sold auctions are solid; reserve-not-met auctions are light rings. Canceled
@@ -56,7 +61,7 @@ type Point = { a: FamilyAuction; t: number; price: number; sold: boolean; isHigh
 export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; asOf: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover] = useState<Hover>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [range, setRange] = useState<Range>("3 Years");
   const since = rangeStart(range, asOf);
@@ -166,12 +171,59 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
     return best;
   };
 
-  const local = (e: React.MouseEvent<SVGSVGElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    return [e.clientX - r.left, e.clientY - r.top] as const;
+  // On a trend line, the month start nearest the pointer that the trend covers.
+  const trendMonth = (mx: number, my: number, reach: number) => {
+    if (!chart || mx < MARGIN.left || mx > width - MARGIN.right) return null;
+    const s = chart.scales;
+    const lines = [trend, selectedTrend].filter((l) => l != null);
+    const t = s.time(mx);
+    const onLine = lines.some((l) => {
+      const v = trendAt(l, t);
+      return v != null && Math.abs(s.y(v) - my) <= reach;
+    });
+    if (!onLine) return null;
+    const d = new Date(t);
+    const months = [Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1), Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)];
+    months.sort((a, b) => Math.abs(a - t) - Math.abs(b - t));
+    return months.find((m) => m >= s.t0 && m <= s.t1 && lines.some((l) => trendAt(l, m) != null)) ?? null;
   };
 
-  const hovered = hover != null && chart && inFilter[hover] ? { p: points[hover], xy: chart.xy[hover] } : null;
+  // The trend lines run through the thick of the dots, so on a line (a narrow band) the
+  // line wins, and off it the nearest dot in reach.
+  const hitTest = (mx: number, my: number, touch: boolean): Hover => {
+    const month = trendMonth(mx, my, touch ? LINE_HIT_TOUCH : LINE_HIT);
+    if (month != null) return { kind: "month", t: month };
+    const i = nearest(mx, my);
+    return i == null ? null : { kind: "dot", i };
+  };
+
+  const local = (e: React.MouseEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top, (e.nativeEvent as PointerEvent).pointerType === "touch"] as const;
+  };
+
+  const hovered =
+    hover?.kind === "dot" && chart && inFilter[hover.i] ? { p: points[hover.i], xy: chart.xy[hover.i] } : null;
+
+  // Each trend's value at the hovered month start, for the markers and readout.
+  const hoveredMonth = (() => {
+    if (hover?.kind !== "month" || !chart) return null;
+    const s = chart.scales;
+    const rows = [
+      { key: "all", label: "All Sales Trend", line: trend, stroke: "stroke-chart-trend", fill: "fill-chart-trend" },
+      {
+        key: "selected",
+        label: "Selected Trend",
+        line: selectedTrend,
+        stroke: "stroke-chart-trend-selected",
+        fill: "fill-chart-trend-selected",
+      },
+    ].flatMap(({ line, ...r }) => {
+      const v = line && trendAt(line, hover.t);
+      return v == null ? [] : [{ ...r, v, y: s.y(v) }];
+    });
+    return rows.length ? { t: hover.t, x: s.x(hover.t), rows } : null;
+  })();
 
   return (
     <section aria-labelledby="auction-results-title" className="rounded-2xl border border-line bg-surface/80 p-4 sm:p-5">
@@ -263,17 +315,18 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
             role="img"
             aria-label={`Scatter plot of ${formatCount(points.length)} auction results over time. The table below lists every result.`}
             className="block touch-none select-none"
-            onPointerMove={(e) => setHover(nearest(...local(e)))}
-            onPointerDown={(e) => setHover(nearest(...local(e)))}
+            onPointerMove={(e) => setHover(hitTest(...local(e)))}
+            onPointerDown={(e) => setHover(hitTest(...local(e)))}
             onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
             onClick={(e) => {
               // Touch taps show the tooltip instead; the results table links every auction.
-              const i = nearest(...local(e));
-              if (i != null && (e.nativeEvent as PointerEvent).pointerType !== "touch") {
-                window.open(auctionUrl(points[i].a.id), "_blank", "noopener,noreferrer");
+              const [mx, my, touch] = local(e);
+              const hit = hitTest(mx, my, touch);
+              if (hit?.kind === "dot" && !touch) {
+                window.open(auctionUrl(points[hit.i].a.id), "_blank", "noopener,noreferrer");
               }
             }}
-            style={{ cursor: hover != null ? "pointer" : "default" }}
+            style={{ cursor: hover?.kind === "dot" ? "pointer" : "default" }}
           >
             {chart.yearBands.map((b) => (
               <rect
@@ -331,20 +384,38 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
               </g>
             )}
 
+            {hoveredMonth && (
+              <g>
+                <line
+                  x1={hoveredMonth.x}
+                  x2={hoveredMonth.x}
+                  y1={MARGIN.top}
+                  y2={HEIGHT - MARGIN.bottom}
+                  className="stroke-line-strong"
+                />
+                {hoveredMonth.rows.map((r) => (
+                  <circle key={r.key} cx={hoveredMonth.x} cy={r.y} r={R} className={`${r.fill} stroke-surface`} strokeWidth={2} />
+                ))}
+              </g>
+            )}
+
             {hovered && (
               <circle cx={hovered.xy[0]} cy={hovered.xy[1]} r={R + 3} className="fill-none stroke-fg" strokeWidth={1.5} />
             )}
           </svg>
         )}
-        {hovered && (
-          <Tooltip
-            point={hovered.p}
-            x={hovered.xy[0]}
-            y={hovered.xy[1]}
-            width={width}
-            trend={trend && trendAt(trend, hovered.p.t)}
-            selectedTrend={selectedTrend && trendAt(selectedTrend, hovered.p.t)}
-          />
+        {hovered && <Tooltip point={hovered.p} x={hovered.xy[0]} y={hovered.xy[1]} width={width} />}
+        {hoveredMonth && (
+          <TipBox x={hoveredMonth.x} y={Math.min(...hoveredMonth.rows.map((r) => r.y))} width={width} w={200} h={90}>
+            <div className="font-medium text-fg">{formatDate(hoveredMonth.t)}</div>
+            {hoveredMonth.rows.map((r) => (
+              <div key={r.key} className="mt-1 flex items-center gap-2">
+                <LineKey className={r.stroke} />
+                <span className="font-semibold text-fg tabular-nums">{formatMoney(r.v)}</span>
+                <span className="text-faint">{r.label}</span>
+              </div>
+            ))}
+          </TipBox>
         )}
       </div>
       {auctions.length > 0 && <FilteredStats auctions={selected} filtered={isFiltered(filters)} />}
@@ -376,30 +447,39 @@ function TrendLine({ segments, className }: { segments: Segment[]; className: st
   );
 }
 
-function Tooltip({
-  point: p,
+// A tooltip panel w wide beside (x, y): to the right, or to the left near the right
+// edge, and kept inside the plot's height (h is about how tall it gets).
+function TipBox({
   x,
   y,
   width,
-  trend,
-  selectedTrend,
+  w,
+  h,
+  children,
 }: {
-  point: Point;
   x: number;
   y: number;
   width: number;
-  trend: number | null;
-  selectedTrend: number | null;
+  w: number;
+  h: number;
+  children: React.ReactNode;
 }) {
-  const W = 260;
-  const left = x + 14 + W > width ? Math.max(0, x - 14 - W) : x + 14;
-  const top = Math.min(Math.max(0, y - 24), HEIGHT - 170);
-  const a = p.a;
+  const left = x + 14 + w > width ? Math.max(0, x - 14 - w) : x + 14;
+  const top = Math.min(Math.max(0, y - 24), HEIGHT - h);
   return (
     <div
       className="pointer-events-none absolute z-10 rounded-lg border border-line-strong/70 bg-surface-3/90 px-3 py-2.5 text-xs leading-relaxed shadow-lg shadow-black/30 backdrop-blur-md"
-      style={{ left, top, width: W }}
+      style={{ left, top, width: w }}
     >
+      {children}
+    </div>
+  );
+}
+
+function Tooltip({ point: p, x, y, width }: { point: Point; x: number; y: number; width: number }) {
+  const a = p.a;
+  return (
+    <TipBox x={x} y={y} width={width} w={260} h={150}>
       <div className="font-medium text-fg">{a.title ?? "Untitled listing"}</div>
       <div className="text-faint">
         {formatDate(a.ended)}
@@ -427,14 +507,8 @@ function Tooltip({
         )}
       </div>
       {a.noReserve && <div className="text-faint">No reserve</div>}
-      {trend != null && (
-        <div className="text-faint">
-          Trend {formatMoney(trend)}
-          {selectedTrend != null && ` · selected ${formatMoney(selectedTrend)}`}
-        </div>
-      )}
       <div className="mt-1 text-faint">Click to open on Cars &amp; Bids</div>
-    </div>
+    </TipBox>
   );
 }
 
@@ -459,7 +533,8 @@ function layout(points: Point[], width: number, since: number, asOf: number) {
 
   const x = (t: number) => MARGIN.left + ((t - t0) / (t1 - t0)) * plotW;
   const y = (v: number) => MARGIN.top + (1 - (Math.log10(v) - lo) / (hi - lo)) * plotH;
-  const scales = { t0, t1, x, y };
+  const time = (px: number) => t0 + ((px - MARGIN.left) / plotW) * (t1 - t0); // x's inverse
+  const scales = { t0, t1, x, y, time };
 
   // Even years get the wash, so a year keeps its shade whatever the range.
   const yearBands: { year: number; x0: number; x1: number }[] = [];
