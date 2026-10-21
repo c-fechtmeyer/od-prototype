@@ -3,8 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { BackLink } from "@/components/back-link";
 import { MarketsList } from "@/components/markets-list";
-import { ModelsTracked } from "@/components/models-tracked";
-import { KpiTiles, MAKE_TILES } from "@/components/summary-tiles";
+import { KpiTiles, makeTiles } from "@/components/summary-tiles";
 import { getMakePage, getPrerenderedMakeSlugs } from "@/lib/make";
 import { logScale } from "@/lib/scale";
 
@@ -45,18 +44,19 @@ async function MakeContent({ params }: { params: PageProps<"/markets/[make]">["p
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 pt-3 pb-6">
-        <div>
-          <h1 className="text-[28px] font-semibold tracking-tight">{makeName}</h1>
-          <p className="mt-1.5 max-w-2xl text-sm text-muted">
-            All {makeName} models with auction history, ranked by listings over the last 365 days. Ranks are overall,
-            among every model on the Markets tab.
-          </p>
-        </div>
-        <ModelsTracked total={markets.length} added={markets.filter((m) => m.isNew).length} makeName={makeName} />
+      <div className="pt-3 pb-6">
+        <h1 className="text-[28px] font-semibold tracking-tight">{makeName}</h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-muted">
+          All {makeName} models with auction history, ranked by listings over the last 365 days. Ranks are overall,
+          among every model on the Markets tab.
+        </p>
       </div>
 
-      <KpiTiles label={`${makeName} auctions`} tiles={MAKE_TILES} windows={data.windows} />
+      <KpiTiles
+        label={`${makeName} auctions`}
+        tiles={makeTiles(markets.length, markets.filter((m) => m.isNew).length)}
+        windows={data.windows}
+      />
 
       <h2 className="mt-8 mb-4 text-lg font-semibold tracking-tight">Models</h2>
       <MarketsList markets={markets} scale={scale} make={{ name: makeName, totalMarkets: data.totalMarkets }} />
@@ -67,9 +67,9 @@ async function MakeContent({ params }: { params: PageProps<"/markets/[make]">["p
 function MakeSkeleton() {
   return (
     <div className="animate-pulse" aria-label="Loading" role="status">
-      <div className="flex flex-wrap items-end justify-between gap-4 pt-3 pb-6">
+      <div className="pt-3 pb-6">
         <div className="h-8 w-48 rounded-md bg-surface-3" />
-        <div className="h-[106px] w-full rounded-xl border border-line bg-surface/80 sm:w-[260px]" />
+        <div className="mt-3 h-4 w-96 max-w-full rounded bg-surface-3" />
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (

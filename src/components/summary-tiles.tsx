@@ -11,6 +11,8 @@ type Tile<S extends WindowStats> = {
   format: (s: S) => string;
   delta: (cur: S, prior: S) => number | null;
   deltaKind: "pct" | "pp";
+  context?: string; // right of the 365D value, e.g. "of 48 tracked"
+  badge?: string; // a pill at the end of the 180D line, e.g. "+3 new"
 };
 
 const PRICE_DEFINITION =
@@ -32,13 +34,21 @@ const SUMMARY_TILES: Tile<SummaryStats>[] = [
   { ...ACTIVE_MARKETS, definition: "Model families with at least one auction that ended in the window." },
 ];
 
-// Make page: the Home tiles, scoped to one make.
-export const MAKE_TILES: Tile<SummaryStats>[] = [
-  { ...METRICS.auctions, definition: "Every listing of this make that ended in the window, including canceled auctions." },
-  { ...METRICS.volume, definition: "Total sale amount of this make's auctions that sold in the window, including sold-after deals." },
-  { ...METRICS.price, definition: PRICE_DEFINITION },
-  { ...ACTIVE_MARKETS, definition: "This make's model families with at least one auction that ended in the window." },
-];
+// Make page: the Home tiles, scoped to one make. Active Markets also carries how many
+// of the make's families are tracked at all (`tracked`) and how many of those are new.
+export function makeTiles(tracked: number, added: number): Tile<SummaryStats>[] {
+  return [
+    { ...METRICS.auctions, definition: "Every listing of this make that ended in the window, including canceled auctions." },
+    { ...METRICS.volume, definition: "Total sale amount of this make's auctions that sold in the window, including sold-after deals." },
+    { ...METRICS.price, definition: PRICE_DEFINITION },
+    {
+      ...ACTIVE_MARKETS,
+      definition: `This make's model families with at least one auction that ended in the window, out of the ${formatCount(tracked)} with any observed auction on Cars & Bids. New models are families whose first observed auction ended in the last 365 days.`,
+      context: `of ${formatCount(tracked)} tracked`,
+      badge: added > 0 ? `+${formatCount(added)} new` : undefined,
+    },
+  ];
+}
 
 // Model page: the same first three tiles, scoped to one family, plus sell-through.
 export const FAMILY_TILES: Tile<WindowStats>[] = [
@@ -97,6 +107,7 @@ export function KpiTiles<S extends WindowStats>({
                   <Delta value={m.delta(c365, p365)} kind={m.deltaKind} className="text-sm font-medium" />
                 </>
               )}
+              {m.context && <span className="ml-auto text-xs whitespace-nowrap text-muted tabular-nums">{m.context}</span>}
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs whitespace-nowrap text-muted">
               <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-faint">
@@ -109,6 +120,11 @@ export function KpiTiles<S extends WindowStats>({
                   <span className="tabular-nums">{m.format(c180)}</span>
                   <Delta value={m.delta(c180, p180)} kind={m.deltaKind} />
                 </>
+              )}
+              {m.badge && (
+                <span className="ml-auto rounded bg-forest-900 px-1.5 py-0.5 font-medium text-forest-300 tabular-nums">
+                  {m.badge}
+                </span>
               )}
             </div>
           </div>
