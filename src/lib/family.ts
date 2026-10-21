@@ -79,6 +79,7 @@ export type FamilyPage = {
   generation: Generation | null; // set on a generation sub-page
   windows: Record<WindowKey, WindowStats>;
   auctions: FamilyAuction[]; // newest first
+  asOf: number; // epoch ms the data was loaded, the "now" its time windows count back from
 };
 
 const RESOLVE_SQL = `
@@ -235,6 +236,7 @@ export async function getFamilyPage(
       driveTrain: r.drive_train,
       yearWindow: r.year_window,
     })),
+    asOf: Date.now(),
   };
 }
 

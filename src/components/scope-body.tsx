@@ -29,7 +29,7 @@ export function ScopeBody({ data }: { data: FamilyPage }) {
       <KpiTiles label={`${scopeName} auctions`} tiles={FAMILY_TILES} windows={data.windows} />
 
       <div className="mt-6">
-        <AuctionScatter auctions={auctions} />
+        <AuctionScatter auctions={auctions} asOf={data.asOf} />
       </div>
 
       {/* Last year's price picture: the distribution against the year before, and by color. */}
