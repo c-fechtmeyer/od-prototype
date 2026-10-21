@@ -1,7 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FilteredStats } from "@/components/filtered-stats";
+import { InfoTip } from "@/components/info-tip";
 import {
   EMPTY_FILTERS,
   type Filters,
@@ -12,9 +13,9 @@ import {
 } from "@/components/scatter-filters";
 import { Segmented } from "@/components/table-parts";
 import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
-import { logPriceTicks, priceTickLabel, timeTicks } from "@/lib/chart";
+import { type TrendPoint, logPriceTicks, loessTrend, priceTickLabel, timeTicks, trendAt } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
-import { formatCount, formatDate, formatDollars } from "@/lib/format";
+import { formatCount, formatDate, formatDollars, formatMoney } from "@/lib/format";
 
 const HEIGHT = 380;
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 56 };
@@ -28,6 +29,8 @@ const FILTERED_OUT_OPACITY = 0.08;
 // Calendar years alternate between a faint wash and none.
 const YEAR_BAND_OPACITY = 0.03;
 const DAY = 86_400_000;
+// Trend lines: a ±6-month window, widened to the nearest 30 sales where sales are sparse.
+const TREND = { windowMs: 182 * DAY, minPoints: 30 };
 
 // Date ranges, in years back from when the data was loaded (null: all time).
 const RANGE_YEARS = { "All Time": null, "5 Years": 5, "3 Years": 3, "1 Year": 1 } as const;
@@ -48,7 +51,8 @@ type Point = { a: FamilyAuction; t: number; price: number; sold: boolean; isHigh
 // Sold auctions are solid; reserve-not-met auctions are light rings. Canceled
 // auctions have no result, so they're counted in the legend but not plotted. The
 // filters above the plot fade out the auctions they exclude; the date range below
-// them sets the time axis, and only auctions inside it are plotted or counted.
+// them sets the time axis, and only auctions inside it are plotted or counted. Trend
+// lines follow sold prices for all sales and, once a filter is set, for the selection.
 export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; asOf: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -56,6 +60,7 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [range, setRange] = useState<Range>("3 Years");
   const since = rangeStart(range, asOf);
+  const clipId = `plot-${useId().replace(/[^\w-]/g, "")}`;
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -84,6 +89,16 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
   );
 
   const options = useMemo(() => buildOptions(plottable.map((p) => p.a)), [plottable]);
+
+  // Trends run over every sold auction in the history, so the date range only windows
+  // them and never changes their shape.
+  const sales = useMemo(() => plottable.filter((p) => p.sold), [plottable]);
+  const trend = useMemo(() => loessTrend(sales, TREND), [sales]);
+  const filtered = isFiltered(filters);
+  const selectedTrend = useMemo(
+    () => (filtered ? loessTrend(sales.filter((p) => matches(p.a, filters)), TREND) : null),
+    [sales, filters, filtered],
+  );
   // Every auction the filters select, canceled ones included, for the stats under the chart.
   const selected = useMemo(() => auctions.filter((a) => matches(a, filters)), [auctions, filters]);
   const inFilter = useMemo(() => points.map((p) => matches(p.a, filters)), [points, filters]);
@@ -94,6 +109,14 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
   const chart = useMemo(
     () => (width > 0 && points.length ? layout(points, width, since, asOf) : null),
     [points, width, since, asOf],
+  );
+  const trendLines = useMemo(
+    () =>
+      chart && {
+        all: trend && trendSegments(trend, chart),
+        selected: selectedTrend && trendSegments(selectedTrend, chart),
+      },
+    [chart, trend, selectedTrend],
   );
 
   // The dot layer changes with the data, width or filters, not on every hover.
@@ -174,6 +197,31 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
             </svg>
             Reserve not met <span className="text-faint tabular-nums">{formatCount(unsold)}</span>
           </span>
+          {trend && (
+            <span className="inline-flex items-center gap-1.5">
+              <LineKey className="stroke-chart-trend" />
+              All Sales Trend
+              <InfoTip id="scatter-trend-def" label="the trend lines">
+                A smoothed line through sold prices: at each date, a straight line fitted to the sales within about
+                six months either side, nearest weighted most, with outlier sales discounted. The line is dashed where
+                sales are thin (it reaches out to the nearest 30) and across gaps with no sales (it bridges them
+                straight).
+                <span className="mt-1.5 block text-faint">
+                  Worked out over every sale on record, so the date range only zooms in. Selected Trend does the same
+                  for the auctions the filters select.
+                </span>
+              </InfoTip>
+            </span>
+          )}
+          {filtered &&
+            (selectedTrend ? (
+              <span className="inline-flex items-center gap-1.5">
+                <LineKey className="stroke-chart-trend-selected" />
+                Selected Trend
+              </span>
+            ) : (
+              trend && <span className="text-faint">Too few selected sales for a trend</span>
+            ))}
           {canceled > 0 && <span className="text-faint">{formatCount(canceled)} canceled, not shown</span>}
         </div>
       </div>
@@ -266,22 +314,86 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
 
             {dots}
 
+            {trendLines && (
+              <g clipPath={`url(#${clipId})`} fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <clipPath id={clipId}>
+                  <rect
+                    x={MARGIN.left}
+                    y={MARGIN.top}
+                    width={width - MARGIN.left - MARGIN.right}
+                    height={HEIGHT - MARGIN.top - MARGIN.bottom}
+                  />
+                </clipPath>
+                {trendLines.all && <TrendLine segments={trendLines.all} className="stroke-chart-trend" />}
+                {trendLines.selected && (
+                  <TrendLine segments={trendLines.selected} className="stroke-chart-trend-selected" />
+                )}
+              </g>
+            )}
+
             {hovered && (
               <circle cx={hovered.xy[0]} cy={hovered.xy[1]} r={R + 3} className="fill-none stroke-fg" strokeWidth={1.5} />
             )}
           </svg>
         )}
-        {hovered && <Tooltip point={hovered.p} x={hovered.xy[0]} y={hovered.xy[1]} width={width} />}
+        {hovered && (
+          <Tooltip
+            point={hovered.p}
+            x={hovered.xy[0]}
+            y={hovered.xy[1]}
+            width={width}
+            trend={trend && trendAt(trend, hovered.p.t)}
+            selectedTrend={selectedTrend && trendAt(selectedTrend, hovered.p.t)}
+          />
+        )}
       </div>
       {auctions.length > 0 && <FilteredStats auctions={selected} filtered={isFiltered(filters)} />}
     </section>
   );
 }
 
-function Tooltip({ point: p, x, y, width }: { point: Point; x: number; y: number; width: number }) {
+// A short stroke in a trend line's color, for the legend.
+function LineKey({ className }: { className: string }) {
+  return (
+    <svg viewBox="0 0 14 10" className="h-2.5 w-3.5" aria-hidden="true">
+      <line x1="1" x2="13" y1="5" y2="5" className={className} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// A trend line on a casing in the surface color, so it reads over the dots. Stretches
+// where sales were too thin for the usual window are dashed.
+function TrendLine({ segments, className }: { segments: Segment[]; className: string }) {
+  return (
+    <>
+      {segments.map((s, i) => (
+        <path key={`casing${i}`} d={s.d} className="stroke-surface" strokeWidth={5} strokeOpacity={0.7} />
+      ))}
+      {segments.map((s, i) => (
+        <path key={i} d={s.d} className={className} strokeWidth={2} strokeDasharray={s.sparse ? "4 6" : undefined} />
+      ))}
+    </>
+  );
+}
+
+function Tooltip({
+  point: p,
+  x,
+  y,
+  width,
+  trend,
+  selectedTrend,
+}: {
+  point: Point;
+  x: number;
+  y: number;
+  width: number;
+  trend: number | null;
+  selectedTrend: number | null;
+}) {
   const W = 260;
   const left = x + 14 + W > width ? Math.max(0, x - 14 - W) : x + 14;
-  const top = Math.min(Math.max(0, y - 24), HEIGHT - 150);
+  const top = Math.min(Math.max(0, y - 24), HEIGHT - 170);
   const a = p.a;
   return (
     <div
@@ -315,6 +427,12 @@ function Tooltip({ point: p, x, y, width }: { point: Point; x: number; y: number
         )}
       </div>
       {a.noReserve && <div className="text-faint">No reserve</div>}
+      {trend != null && (
+        <div className="text-faint">
+          Trend {formatMoney(trend)}
+          {selectedTrend != null && ` · selected ${formatMoney(selectedTrend)}`}
+        </div>
+      )}
       <div className="mt-1 text-faint">Click to open on Cars &amp; Bids</div>
     </div>
   );
@@ -341,6 +459,7 @@ function layout(points: Point[], width: number, since: number, asOf: number) {
 
   const x = (t: number) => MARGIN.left + ((t - t0) / (t1 - t0)) * plotW;
   const y = (v: number) => MARGIN.top + (1 - (Math.log10(v) - lo) / (hi - lo)) * plotH;
+  const scales = { t0, t1, x, y };
 
   // Even years get the wash, so a year keeps its shade whatever the range.
   const yearBands: { year: number; x0: number; x1: number }[] = [];
@@ -350,9 +469,32 @@ function layout(points: Point[], width: number, since: number, asOf: number) {
   }
 
   return {
+    scales,
     xy: points.map((p) => [x(p.t), y(p.price)] as const),
     yearBands,
     yTicks: logPriceTicks(10 ** lo, 10 ** hi).map((v) => ({ v, y: y(v) })),
     xTicks: timeTicks(t0, t1, plotW).map((t) => ({ ...t, x: x(t.v) })),
   };
+}
+
+type Segment = { d: string; sparse: boolean };
+
+// A trend as SVG path segments on the chart's scales, split where it turns sparse or
+// dense. Steps outside the time axis are dropped, bar one either side so the line
+// runs on to the clipped edge.
+function trendSegments(trend: TrendPoint[], { scales: s }: ReturnType<typeof layout>): Segment[] {
+  const segments: Segment[] = [];
+  let cur: Segment | null = null;
+  trend.forEach((p, i) => {
+    if ((trend[i + 1]?.t ?? Infinity) < s.t0 || (trend[i - 1]?.t ?? -Infinity) > s.t1) return;
+    const xy = `${s.x(p.t).toFixed(1)},${s.y(p.price).toFixed(1)}`;
+    if (cur?.sparse === p.sparse) {
+      cur.d += `L${xy}`;
+      return;
+    }
+    if (cur) cur.d += `L${xy}`; // run the last segment on to where the next one starts
+    cur = { d: `M${xy}`, sparse: p.sparse };
+    segments.push(cur);
+  });
+  return segments;
 }

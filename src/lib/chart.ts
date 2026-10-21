@@ -64,6 +64,127 @@ export function quantile(sorted: number[], q: number): number | null {
 
 export const median = (values: number[]) => quantile([...values].sort((a, b) => a - b), 0.5);
 
+const YEAR_MS = 365.25 * 86_400_000;
+
+export type TrendPoint = { t: number; price: number; sparse: boolean };
+
+// A robust LOESS trend through sales over time. At each of `steps` evenly spaced
+// times from the first sale to the last, it fits a straight line to log price over
+// the nearby sales, weighted by a tricube kernel ±window wide, and takes that line's
+// value there. Where fewer than minPoints sales fall inside the window, it widens to
+// the nearest minPoints. Inside a gap (no sale within a quarter window), a fit would
+// extrapolate from one side, so the trend bridges the gap with a straight line in log
+// price instead. Widened and bridged steps are flagged sparse. Two rounds of bisquare
+// reweighting take the pull out of outlier sales; their residuals are read off the
+// grid, between steps, rather than refit at every sale. Null when there are too few
+// sales for a trend.
+export function loessTrend(
+  sales: { t: number; price: number }[],
+  { windowMs, minPoints, steps = 400, iterations = 2 }: { windowMs: number; minPoints: number; steps?: number; iterations?: number },
+): TrendPoint[] | null {
+  const sorted = [...sales].sort((a, b) => a.t - b.t);
+  const n = sorted.length;
+  if (n < minPoints) return null;
+  const start = sorted[0].t;
+  const xs = sorted.map((s) => (s.t - start) / YEAR_MS); // years, for well-scaled sums
+  const ys = sorted.map((s) => Math.log10(s.price));
+  const span = xs[n - 1];
+  if (!(span > 0)) return null;
+  const h0 = windowMs / YEAR_MS;
+  const robust = new Float64Array(n).fill(1);
+
+  // First index with xs[i] >= v (or > v when `after`).
+  const bound = (v: number, after: boolean) => {
+    let lo = 0;
+    let hi = n;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (xs[mid] < v || (after && xs[mid] === v)) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+
+  const fit = (x: number) => {
+    let lo = bound(x - h0, false);
+    let hi = bound(x + h0, true);
+    let h = h0;
+    const widened = hi - lo < minPoints;
+    if (widened) {
+      // Grow toward the nearer neighbor until the window holds minPoints sales.
+      while (hi - lo < minPoints) {
+        if (hi >= n || (lo > 0 && x - xs[lo - 1] <= xs[hi] - x)) lo--;
+        else hi++;
+      }
+      h = Math.max(x - xs[lo], xs[hi - 1] - x) * 1.001; // so the farthest sale still counts
+    }
+    let s0 = 0, s1 = 0, s2 = 0, t0 = 0, t1 = 0;
+    for (let i = lo; i < hi; i++) {
+      const d = xs[i] - x;
+      const u = 1 - (Math.abs(d) / h) ** 3;
+      const w = u * u * u * robust[i];
+      s0 += w;
+      s1 += w * d;
+      s2 += w * d * d;
+      t0 += w * ys[i];
+      t1 += w * d * ys[i];
+    }
+    const det = s0 * s2 - s1 * s1;
+    // The local line's value at x; its mean when the sales sit at one time.
+    const v = det > 1e-12 ? (s2 * t0 - s1 * t1) / det : t0 / s0;
+    return { v, widened };
+  };
+
+  const grid = Array.from({ length: steps + 1 }, (_, s) => (span * s) / steps);
+  let fits = grid.map(fit);
+  for (let it = 0; it < iterations; it++) {
+    const residuals = xs.map((x, i) => {
+      const g = Math.min(steps - 1, Math.floor((x / span) * steps));
+      const f = (x - grid[g]) / (grid[g + 1] - grid[g]);
+      return ys[i] - (fits[g].v + f * (fits[g + 1].v - fits[g].v));
+    });
+    const scale = 6 * (median(residuals.filter(Number.isFinite).map(Math.abs)) ?? 0);
+    if (!(scale > 0)) break;
+    residuals.forEach((r, i) => {
+      const u = 1 - (r / scale) ** 2;
+      robust[i] = Math.abs(r) < scale ? u * u : 0;
+    });
+    fits = grid.map(fit);
+  }
+
+  // Bridge each run of gap steps straight across, from the step before it to the step
+  // after. The first and last steps sit on sales, so neither is ever in a gap.
+  const vs = fits.map((f) => f.v);
+  const gap = grid.map((x, s) => {
+    if (fits[s].widened) return false;
+    const i = bound(x, false);
+    return Math.min(i > 0 ? x - xs[i - 1] : Infinity, i < n ? xs[i] - x : Infinity) > h0 / 4;
+  });
+  for (let s = 1; s < steps; s++) {
+    if (!gap[s]) continue;
+    let e = s;
+    while (gap[e]) e++;
+    for (let j = s; j < e; j++) vs[j] = vs[s - 1] + ((vs[e] - vs[s - 1]) * (j - s + 1)) / (e - s + 1);
+    s = e;
+  }
+
+  const out: TrendPoint[] = [];
+  vs.forEach((v, s) => {
+    if (Number.isFinite(v)) out.push({ t: start + grid[s] * YEAR_MS, price: 10 ** v, sparse: fits[s].widened || gap[s] });
+  });
+  return out.length > 1 ? out : null;
+}
+
+// The trend's price at time t, between its first and last sale; null outside.
+export function trendAt(trend: TrendPoint[], t: number): number | null {
+  if (t < trend[0].t || t > trend[trend.length - 1].t) return null;
+  const i = Math.max(1, trend.findIndex((p) => p.t >= t));
+  const a = trend[i - 1];
+  const b = trend[i];
+  const f = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
+  return 10 ** (Math.log10(a.price) + f * (Math.log10(b.price) - Math.log10(a.price)));
+}
+
 // Gaussian kernel density estimate of `values`, evaluated at each point of `grid`.
 // Bandwidth by Silverman's rule of thumb. Null when there are too few values for a
 // meaningful curve.
