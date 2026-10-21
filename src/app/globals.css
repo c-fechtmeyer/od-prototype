@@ -34,6 +34,11 @@
   /* Auction scatter: sold auctions are solid dots, reserve-not-met auctions light rings. */
   --color-chart-sold: #41a96d;
   --color-chart-unsold: #b9ecca;
+
+  /* Scatter trend lines: all sales in near-white, the filtered selection in violet
+     (well apart from the sold green, color-blind vision included). */
+  --color-chart-trend: #e3ede7;
+  --color-chart-trend-selected: #9085e9;
 }
 
 @theme inline {
