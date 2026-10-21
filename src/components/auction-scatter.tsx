@@ -3,6 +3,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FilteredStats } from "@/components/filtered-stats";
 import { InfoTip } from "@/components/info-tip";
+import { type TipHold, TipBox, TipTitle, usePinnedTip, useTipBridge } from "@/components/chart-tip";
 import {
   EMPTY_FILTERS,
   type Filters,
@@ -12,7 +13,7 @@ import {
   matches,
 } from "@/components/scatter-filters";
 import { Segmented } from "@/components/table-parts";
-import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
+import { isSold, resultPrice } from "@/lib/auction";
 import { type TrendPoint, logPriceTicks, loessTrend, priceTickLabel, timeTicks, trendAt } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
 import { formatCount, formatDate, formatDollars, formatMoney } from "@/lib/format";
@@ -62,6 +63,8 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover>(null);
+  const pin = usePinnedTip<number>(wrapRef); // by index into points, like hover
+  const bridge = useTipBridge();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [range, setRange] = useState<Range>("3 Years");
   const since = rangeStart(range, asOf);
@@ -197,17 +200,29 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
     return i == null ? null : { kind: "dot", i };
   };
 
-  const local = (e: React.MouseEvent<SVGSVGElement>) => {
+  const local = (e: React.PointerEvent<SVGSVGElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
-    return [e.clientX - r.left, e.clientY - r.top, (e.nativeEvent as PointerEvent).pointerType === "touch"] as const;
+    return [e.clientX - r.left, e.clientY - r.top, e.pointerType === "touch"] as const;
+  };
+  // A move shows what's under the pointer, unless the mouse is crossing from the hovered
+  // dot to its tooltip; a press shows what it's on straight away.
+  const track = (e: React.PointerEvent<SVGSVGElement>) => {
+    const h = hitTest(...local(e));
+    const leaving = pin.pinned == null && hover?.kind === "dot" && !(h?.kind === "dot" && h.i === hover.i);
+    bridge.step(e, e.type === "pointermove" && leaving, () => {
+      setHover(h);
+      pin.track(h?.kind === "dot" ? h.i : null);
+    });
   };
 
-  const hovered =
-    hover?.kind === "dot" && chart && inFilter[hover.i] ? { p: points[hover.i], xy: chart.xy[hover.i] } : null;
+  // A pinned tooltip stays put, whatever the pointer is over.
+  const tipDot = pin.shown(hover?.kind === "dot" ? hover.i : null);
+  const tip: Hover = tipDot != null ? { kind: "dot", i: tipDot } : hover?.kind === "month" ? hover : null;
+  const hovered = tip?.kind === "dot" && chart && inFilter[tip.i] ? { p: points[tip.i], xy: chart.xy[tip.i] } : null;
 
   // Each trend's value at the hovered month start, for the markers and readout.
   const hoveredMonth = (() => {
-    if (hover?.kind !== "month" || !chart) return null;
+    if (tip?.kind !== "month" || !chart) return null;
     const s = chart.scales;
     const rows = [
       { key: "all", label: "All Sales Trend", line: trend, stroke: "stroke-chart-trend", fill: "fill-chart-trend" },
@@ -219,10 +234,10 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
         fill: "fill-chart-trend-selected",
       },
     ].flatMap(({ line, ...r }) => {
-      const v = line && trendAt(line, hover.t);
+      const v = line && trendAt(line, tip.t);
       return v == null ? [] : [{ ...r, v, y: s.y(v) }];
     });
-    return rows.length ? { t: hover.t, x: s.x(hover.t), rows } : null;
+    return rows.length ? { t: tip.t, x: s.x(tip.t), rows } : null;
   })();
 
   return (
@@ -295,14 +310,24 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
               value={range}
               onChange={(r) => {
                 setRange(r);
-                setHover(null); // hover indexes into the points in range
+                setHover(null); // hover and the pin index into the points in range
+                pin.clear();
               }}
             />
           </div>
         </>
       )}
 
-      <div ref={wrapRef} className="relative" style={{ height: HEIGHT }}>
+      <div
+        ref={wrapRef}
+        className="relative"
+        style={{ height: HEIGHT }}
+        onPointerLeave={(e) => {
+          if (e.pointerType !== "mouse") return;
+          bridge.reset();
+          setHover(null);
+        }}
+      >
         {points.length === 0 && (
           <p className="grid h-full place-items-center text-sm text-faint">
             {plottable.length ? "No auction results in this date range." : "No auction results to plot yet."}
@@ -315,17 +340,11 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
             role="img"
             aria-label={`Scatter plot of ${formatCount(points.length)} auction results over time. The table below lists every result.`}
             className="block touch-none select-none"
-            onPointerMove={(e) => setHover(hitTest(...local(e)))}
-            onPointerDown={(e) => setHover(hitTest(...local(e)))}
-            onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
-            onClick={(e) => {
-              // Touch taps show the tooltip instead; the results table links every auction.
-              const [mx, my, touch] = local(e);
-              const hit = hitTest(mx, my, touch);
-              if (hit?.kind === "dot" && !touch) {
-                window.open(auctionUrl(points[hit.i].a.id), "_blank", "noopener,noreferrer");
-              }
-            }}
+            onPointerMove={track}
+            onPointerDown={track}
+            // A click or tap on a dot pins its tooltip open (or closes it); the title there
+            // links to the auction. The pointer down just before has set hover to what's hit.
+            onClick={() => pin.click(hover?.kind === "dot" ? hover.i : null)}
             style={{ cursor: hover?.kind === "dot" ? "pointer" : "default" }}
           >
             {chart.yearBands.map((b) => (
@@ -404,9 +423,11 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
             )}
           </svg>
         )}
-        {hovered && <Tooltip point={hovered.p} x={hovered.xy[0]} y={hovered.xy[1]} width={width} />}
+        {hovered && (
+          <Tooltip point={hovered.p} x={hovered.xy[0]} y={hovered.xy[1]} width={width} hold={bridge.box} />
+        )}
         {hoveredMonth && (
-          <TipBox x={hoveredMonth.x} y={Math.min(...hoveredMonth.rows.map((r) => r.y))} width={width} w={200} h={90}>
+          <TipBox x={hoveredMonth.x} y={Math.min(...hoveredMonth.rows.map((r) => r.y))} width={width} height={HEIGHT} w={200} h={90}>
             <div className="font-medium text-fg">{formatDate(hoveredMonth.t)}</div>
             {hoveredMonth.rows.map((r) => (
               <div key={r.key} className="mt-1 flex items-center gap-2">
@@ -447,40 +468,23 @@ function TrendLine({ segments, className }: { segments: Segment[]; className: st
   );
 }
 
-// A tooltip panel w wide beside (x, y): to the right, or to the left near the right
-// edge, and kept inside the plot's height (h is about how tall it gets).
-function TipBox({
+function Tooltip({
+  point: p,
   x,
   y,
   width,
-  w,
-  h,
-  children,
+  hold,
 }: {
+  point: Point;
   x: number;
   y: number;
   width: number;
-  w: number;
-  h: number;
-  children: React.ReactNode;
+  hold: TipHold;
 }) {
-  const left = x + 14 + w > width ? Math.max(0, x - 14 - w) : x + 14;
-  const top = Math.min(Math.max(0, y - 24), HEIGHT - h);
-  return (
-    <div
-      className="pointer-events-none absolute z-10 rounded-lg border border-line-strong/70 bg-surface-3/90 px-3 py-2.5 text-xs leading-relaxed shadow-lg shadow-black/30 backdrop-blur-md"
-      style={{ left, top, width: w }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Tooltip({ point: p, x, y, width }: { point: Point; x: number; y: number; width: number }) {
   const a = p.a;
   return (
-    <TipBox x={x} y={y} width={width} w={260} h={150}>
-      <div className="font-medium text-fg">{a.title ?? "Untitled listing"}</div>
+    <TipBox x={x} y={y} width={width} height={HEIGHT} w={260} h={150} hold={hold}>
+      <TipTitle a={a} />
       <div className="text-faint">
         {formatDate(a.ended)}
         {a.generation && ` · ${a.generation}`}
@@ -507,7 +511,6 @@ function Tooltip({ point: p, x, y, width }: { point: Point; x: number; y: number
         )}
       </div>
       {a.noReserve && <div className="text-faint">No reserve</div>}
-      <div className="mt-1 text-faint">Click to open on Cars &amp; Bids</div>
     </TipBox>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { auctionUrl, isSold, resultPrice } from "@/lib/auction";
+import { type TipHold, TipBox, TipTitle, usePinnedTip, useTipBridge } from "@/components/chart-tip";
+import { isSold, resultPrice } from "@/lib/auction";
 import { countTicks, kde, logPriceTicks, median, priceTickLabel } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
 import { formatCount, formatDate, formatDollars } from "@/lib/format";
@@ -21,6 +22,9 @@ export function PriceDistribution({ auctions }: { auctions: FamilyAuction[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
+  // Pinned by auction, not dot index: a new width rebins the dots and reorders them.
+  const pin = usePinnedTip<FamilyAuction>(wrapRef);
+  const bridge = useTipBridge();
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -57,11 +61,23 @@ export function PriceDistribution({ auctions }: { auctions: FamilyAuction[] }) {
     });
     return best;
   };
-  const local = (e: React.MouseEvent<SVGSVGElement>) => {
+  const local = (e: React.PointerEvent<SVGSVGElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top] as const;
   };
-  const hovered = hover != null && chart ? chart.dots[hover] : null;
+  const auctionAt = (i: number | null) => (i != null && chart ? chart.dots[i].a : null);
+  // A move shows what's under the pointer, unless the mouse is crossing from the hovered
+  // dot to its tooltip; a press shows what it's on straight away.
+  const track = (e: React.PointerEvent<SVGSVGElement>) => {
+    const i = nearest(...local(e));
+    const leaving = pin.pinned == null && hover != null && i !== hover;
+    bridge.step(e, e.type === "pointermove" && leaving, () => {
+      setHover(i);
+      pin.track(auctionAt(i));
+    });
+  };
+  const shown = pin.shown(auctionAt(hover));
+  const hovered = (shown && chart?.dots.find((d) => d.a === shown)) || null;
 
   return (
     <section aria-labelledby="price-distribution-title" className="h-full rounded-2xl border border-line bg-surface/80 p-4 sm:p-5">
@@ -92,7 +108,16 @@ export function PriceDistribution({ auctions }: { auctions: FamilyAuction[] }) {
         </div>
       </div>
 
-      <div ref={wrapRef} className="relative" style={{ height: HEIGHT }}>
+      <div
+        ref={wrapRef}
+        className="relative"
+        style={{ height: HEIGHT }}
+        onPointerLeave={(e) => {
+          if (e.pointerType !== "mouse") return;
+          bridge.reset();
+          setHover(null);
+        }}
+      >
         {current.length === 0 && (
           <p className="grid h-full place-items-center text-sm text-faint">
             Insufficient Data: no sales in the last 365 days.
@@ -105,15 +130,11 @@ export function PriceDistribution({ auctions }: { auctions: FamilyAuction[] }) {
             role="img"
             aria-label={`Distribution of ${formatCount(current.length)} sale prices over the last 365 days, with the year before for comparison. The table below lists every result.`}
             className="block touch-none select-none"
-            onPointerMove={(e) => setHover(nearest(...local(e)))}
-            onPointerDown={(e) => setHover(nearest(...local(e)))}
-            onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
-            onClick={(e) => {
-              const i = nearest(...local(e));
-              if (i != null && (e.nativeEvent as PointerEvent).pointerType !== "touch") {
-                window.open(auctionUrl(chart.dots[i].a.id), "_blank", "noopener,noreferrer");
-              }
-            }}
+            onPointerMove={track}
+            onPointerDown={track}
+            // A click or tap on a dot pins its tooltip open (or closes it); the title there
+            // links to the auction. The pointer down just before has set hover to what's hit.
+            onClick={() => pin.click(auctionAt(hover))}
             style={{ cursor: hover != null ? "pointer" : "default" }}
           >
             {chart.yTicks.map((t) => (
@@ -184,28 +205,21 @@ export function PriceDistribution({ auctions }: { auctions: FamilyAuction[] }) {
             )}
           </svg>
         )}
-        {hovered && <Tooltip dot={hovered} width={width} />}
+        {hovered && <Tooltip dot={hovered} width={width} hold={bridge.box} />}
       </div>
     </section>
   );
 }
 
-function Tooltip({ dot, width }: { dot: Dot; width: number }) {
-  const W = 240;
-  const left = dot.x + 14 + W > width ? Math.max(0, dot.x - 14 - W) : dot.x + 14;
-  const top = Math.min(Math.max(0, dot.y - 24), HEIGHT - 110);
+function Tooltip({ dot, width, hold }: { dot: Dot; width: number; hold: TipHold }) {
   return (
-    <div
-      className="pointer-events-none absolute z-10 rounded-lg border border-line-strong/70 bg-surface-3/90 px-3 py-2.5 text-xs leading-relaxed shadow-lg shadow-black/30 backdrop-blur-md"
-      style={{ left, top, width: W }}
-    >
-      <div className="font-medium text-fg">{dot.a.title ?? "Untitled listing"}</div>
+    <TipBox x={dot.x} y={dot.y} width={width} height={HEIGHT} w={240} h={110} hold={hold}>
+      <TipTitle a={dot.a} />
       <div className="text-faint">{formatDate(dot.a.ended)}</div>
       <div className="mt-1.5 text-fg">
         Sold for <span className="font-semibold">{formatDollars(dot.price)}</span>
       </div>
-      <div className="mt-1 text-faint">Click to open on Cars &amp; Bids</div>
-    </div>
+    </TipBox>
   );
 }
 
