@@ -1,13 +1,16 @@
 import { INSUFFICIENT } from "@/lib/format";
 
-// A YoY change: arrow + signed magnitude. Color reinforces the arrow, never replaces it.
+// A change, YoY unless `vs` says otherwise: arrow + signed magnitude. Color
+// reinforces the arrow, never replaces it.
 export function Delta({
   value,
   kind = "pct",
+  vs = "year over year",
   className = "",
 }: {
   value: number | null;
   kind?: "pct" | "pp";
+  vs?: string; // what the change is against, for screen readers
   className?: string;
 }) {
   if (value == null) {
@@ -24,7 +27,7 @@ export function Delta({
   return (
     <span
       className={`inline-flex items-center gap-0.5 ${up ? "text-up" : "text-down"} ${className}`}
-      aria-label={`${up ? "up" : "down"} ${text} year over year`}
+      aria-label={`${up ? "up" : "down"} ${text} ${vs}`}
     >
       <svg viewBox="0 0 8 8" className="size-[7px] shrink-0" aria-hidden="true">
         <path d={up ? "M4 1 7.5 7h-7z" : "M4 7 .5 1h7z"} fill="currentColor" />
