@@ -145,7 +145,7 @@ export function Segmented<T extends string | number>({
   options: readonly T[];
   value: T;
   onChange: (v: T) => void;
-  format?: (v: T) => string;
+  format?: (v: T) => ReactNode;
   describedBy?: string;
 }) {
   return (

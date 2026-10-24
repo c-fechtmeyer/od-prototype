@@ -2,10 +2,11 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Delta } from "@/components/delta";
+import { Segmented } from "@/components/table-parts";
 import { STATUS_LABEL, auctionUrl, isSold, resultPrice } from "@/lib/auction";
 import { logPriceTicks, priceTickLabel, timeTicks } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
-import { formatCount, formatDate, formatDollars, formatMoney, pctChange } from "@/lib/format";
+import { formatCount, formatDate, formatDollars, formatMoney, formatMoneyChange, pctChange } from "@/lib/format";
 
 const HEIGHT = 360;
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 56 };
@@ -19,10 +20,26 @@ const FADED_OPACITY = 0.1;
 type Event = { a: FamilyAuction; price: number; sold: boolean; isHighBid: boolean };
 
 // One car: every listing of its VIN, newest first, and the ones with a result to
-// plot, oldest first.
-type Car = { vin: string; listings: FamilyAuction[]; events: Event[] };
+// plot, oldest first. `change` (relative) and `dollarChange` are its latest sale
+// against its first, when it has sold at least twice.
+type Car = {
+  vin: string;
+  listings: FamilyAuction[];
+  events: Event[];
+  change: number | null;
+  dollarChange: number | null;
+};
 
 type Emphasis = "normal" | "faded" | "hovered" | "selected";
+
+// Which cars to show, by the same latest-vs-first-sale change as the list. A car sold
+// fewer than twice has no change, so it shows only under All.
+type Trend = "all" | "up" | "down";
+const TRENDS = ["all", "up", "down"] as const;
+const TREND_LABEL: Record<Trend, string> = { all: "All", up: "Increased", down: "Decreased" };
+
+const matchesTrend = (car: Car, trend: Trend) =>
+  trend === "all" || (car.change != null && (trend === "up" ? car.change > 0 : car.change < 0));
 
 // Cars listed more than once, matched by VIN: one line per car through each of its
 // results over time, on the scatter's log price axis and markers. Canceled listings
@@ -35,9 +52,24 @@ export function SameVinSales({ auctions }: { auctions: FamilyAuction[] }) {
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<{ car: number; event: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [trend, setTrend] = useState<Trend>("all");
 
   const cars = useMemo(() => repeatCars(auctions), [auctions]);
   const hasCars = cars.length > 0;
+  // Indices of the cars the trend buttons leave showing. The axes still fit every
+  // car, so switching doesn't rescale the chart.
+  const shown = useMemo(() => cars.flatMap((c, i) => (matchesTrend(c, trend) ? [i] : [])), [cars, trend]);
+  const trendCounts = useMemo(
+    () => Object.fromEntries(TRENDS.map((t) => [t, cars.filter((c) => matchesTrend(c, t)).length])) as Record<Trend, number>,
+    [cars],
+  );
+
+  const pickTrend = (t: Trend) => {
+    setTrend(t);
+    setHover(null);
+    // Keep the selected car only if it's still showing.
+    setSelected((s) => (cars.some((c) => c.vin === s && matchesTrend(c, t)) ? s : null));
+  };
 
   // The plot only exists when there are cars to draw.
   useLayoutEffect(() => {
@@ -47,8 +79,8 @@ export function SameVinSales({ auctions }: { auctions: FamilyAuction[] }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [hasCars]);
-  const canceled = cars.reduce((n, c) => n + c.listings.filter((a) => a.status === "canceled").length, 0);
-  const plotted = cars.reduce((n, c) => n + c.events.length, 0);
+  const canceled = shown.reduce((n, i) => n + cars[i].listings.filter((a) => a.status === "canceled").length, 0);
+  const plotted = shown.reduce((n, i) => n + cars[i].events.length, 0);
 
   const chart = useMemo(() => (width > 0 && cars.length ? layout(cars, width) : null), [cars, width]);
 
@@ -69,7 +101,7 @@ export function SameVinSales({ auctions }: { auctions: FamilyAuction[] }) {
   const marks = useMemo(() => {
     if (!chart) return null;
     const isSelected = (i: number) => Number(cars[i].vin === selected);
-    const order = cars.map((_, i) => i).sort((i, j) => isSelected(i) - isSelected(j));
+    const order = [...shown].sort((i, j) => isSelected(i) - isSelected(j));
     return order.map((i) => (
       <CarMarks
         key={cars[i].vin}
@@ -78,14 +110,14 @@ export function SameVinSales({ auctions }: { auctions: FamilyAuction[] }) {
         emphasis={selected == null ? "normal" : cars[i].vin === selected ? "selected" : "faded"}
       />
     ));
-  }, [chart, cars, selected]);
+  }, [chart, cars, shown, selected]);
 
   const nearest = (mx: number, my: number) => {
     if (!chart) return null;
     let best: { car: number; event: number } | null = null;
     let bestD = HIT * HIT;
-    for (const [car, pts] of chart.xy.entries()) {
-      for (const [event, [x, y]] of pts.entries()) {
+    for (const car of shown) {
+      for (const [event, [x, y]] of chart.xy[car].entries()) {
         const d = (x - mx) ** 2 + (y - my) ** 2;
         if (d <= bestD) {
           bestD = d;
@@ -130,7 +162,7 @@ export function SameVinSales({ auctions }: { auctions: FamilyAuction[] }) {
               Reserve not met
             </span>
             <span className="tabular-nums">
-              {formatCount(cars.length)} car{cars.length === 1 ? "" : "s"}
+              {formatCount(shown.length)} car{shown.length === 1 ? "" : "s"}
               <span className="text-faint"> · {formatCount(plotted)} results</span>
             </span>
             {canceled > 0 && <span className="text-faint">{formatCount(canceled)} canceled, not plotted</span>}
@@ -141,99 +173,129 @@ export function SameVinSales({ auctions }: { auctions: FamilyAuction[] }) {
       {!hasCars ? (
         <p className="grid h-[160px] place-items-center text-sm text-faint">No repeat sales available.</p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-5">
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-line lg:h-[360px]">
-            <div className="flex justify-between gap-3 border-b border-line px-3 py-2 text-[11px] text-faint">
-              <span>Latest Listing</span>
-              <span>Result · vs. First Sale</span>
-            </div>
-            <ul ref={listRef} className="relative max-h-[280px] divide-y divide-line/60 overflow-y-auto lg:max-h-none lg:flex-1">
-              {cars.map((c) => (
-                <CarItem
-                  key={c.vin}
-                  car={c}
-                  selected={c.vin === selected}
-                  onToggle={() => setSelected((s) => (s === c.vin ? null : c.vin))}
-                  itemRef={(el) => {
-                    if (el) itemRefs.current.set(c.vin, el);
-                    return () => {
-                      itemRefs.current.delete(c.vin);
-                    };
-                  }}
-                />
-              ))}
-            </ul>
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <Segmented
+              label="Show cars"
+              options={TRENDS}
+              value={trend}
+              onChange={pickTrend}
+              describedBy="same-vin-trend-note"
+              format={(t) => (
+                <span className="inline-flex items-center gap-1.5">
+                  {t !== "all" && (
+                    <svg viewBox="0 0 8 8" className={`size-[7px] ${t === "up" ? "text-up" : "text-down"}`} aria-hidden="true">
+                      <path d={t === "up" ? "M4 1 7.5 7h-7z" : "M4 7 .5 1h7z"} fill="currentColor" />
+                    </svg>
+                  )}
+                  {TREND_LABEL[t]}
+                  <span className="text-faint">{formatCount(trendCounts[t])}</span>
+                </span>
+              )}
+            />
+            <p id="same-vin-trend-note" className="text-[11px] text-faint">
+              By latest sale vs. first sale. Cars sold fewer than twice show only under All.
+            </p>
           </div>
-
-          <div ref={wrapRef} className="relative min-w-0" style={{ height: HEIGHT }}>
-            {chart && (
-              <svg
-                width={width}
-                height={HEIGHT}
-                role="img"
-                aria-label={`Line chart of ${formatCount(cars.length)} cars listed more than once, each car's results over time. The list beside it names every car.`}
-                className="block touch-none select-none"
-                onPointerMove={(e) => setHover(nearest(...local(e)))}
-                onPointerDown={(e) => setHover(nearest(...local(e)))}
-                onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
-                onClick={(e) => {
-                  // A dot selects its car; a click on empty space clears the selection.
-                  const hit = nearest(...local(e));
-                  setSelected(hit ? cars[hit.car].vin : null);
-                }}
-                style={{ cursor: hover ? "pointer" : "default" }}
-              >
-                {chart.yTicks.map((t) => (
-                  <g key={`y${t.v}`}>
-                    <line x1={MARGIN.left} x2={width - MARGIN.right} y1={t.y} y2={t.y} className="stroke-line" />
-                    <text x={MARGIN.left - 8} y={t.y} dy="0.32em" textAnchor="end" className="fill-faint text-[11px] tabular-nums">
-                      {priceTickLabel(t.v)}
-                    </text>
-                  </g>
-                ))}
-                {chart.xTicks.map((t) => (
-                  <g key={`x${t.v}`}>
-                    <line x1={t.x} x2={t.x} y1={MARGIN.top} y2={HEIGHT - MARGIN.bottom} className="stroke-line" />
-                    <text x={t.x} y={HEIGHT - MARGIN.bottom + 18} textAnchor="middle" className="fill-faint text-[11px] tabular-nums">
-                      {t.label}
-                    </text>
-                  </g>
-                ))}
-                <text
-                  transform={`translate(12 ${MARGIN.top + (HEIGHT - MARGIN.top - MARGIN.bottom) / 2}) rotate(-90)`}
-                  textAnchor="middle"
-                  className="fill-faint text-[10px]"
-                >
-                  Price (log scale)
-                </text>
-
-                {marks}
-
-                {/* The hovered car's line comes forward so its other results are easy to find. */}
-                {hovered && hovered.car.vin !== selected && <CarMarks car={hovered.car} xy={hovered.xy} emphasis="hovered" />}
-                {hovered && (
-                  <circle
-                    cx={hovered.xy[hovered.event][0]}
-                    cy={hovered.xy[hovered.event][1]}
-                    r={R + 3}
-                    className="fill-none stroke-fg"
-                    strokeWidth={1.5}
-                  />
+          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-5">
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-line lg:h-[360px]">
+              <div className="flex justify-between gap-3 border-b border-line px-3 py-2 text-[11px] text-faint">
+                <span>Latest Listing</span>
+                <span>Result · vs. First Sale</span>
+              </div>
+              <ul ref={listRef} className="relative max-h-[280px] divide-y divide-line/60 overflow-y-auto lg:max-h-none lg:flex-1">
+                {shown.length === 0 && (
+                  <li className="px-3 py-6 text-center text-xs text-faint">
+                    No cars sold for {trend === "up" ? "more" : "less"} than their first sale.
+                  </li>
                 )}
-              </svg>
-            )}
-            {hovered && (
-              <Tooltip
-                car={hovered.car}
-                event={hovered.car.events[hovered.event]}
-                x={hovered.xy[hovered.event][0]}
-                y={hovered.xy[hovered.event][1]}
-                width={width}
-                selected={hovered.car.vin === selected}
-              />
-            )}
+                {shown.map((i) => cars[i]).map((c) => (
+                  <CarItem
+                    key={c.vin}
+                    car={c}
+                    selected={c.vin === selected}
+                    onToggle={() => setSelected((s) => (s === c.vin ? null : c.vin))}
+                    itemRef={(el) => {
+                      if (el) itemRefs.current.set(c.vin, el);
+                      return () => {
+                        itemRefs.current.delete(c.vin);
+                      };
+                    }}
+                  />
+                ))}
+              </ul>
+            </div>
+
+            <div ref={wrapRef} className="relative min-w-0" style={{ height: HEIGHT }}>
+              {chart && (
+                <svg
+                  width={width}
+                  height={HEIGHT}
+                  role="img"
+                  aria-label={`Line chart of ${formatCount(shown.length)} cars listed more than once${trend === "all" ? "" : `, whose latest sale is ${trend === "up" ? "above" : "below"} their first`}, each car's results over time. The list beside it names every car.`}
+                  className="block touch-none select-none"
+                  onPointerMove={(e) => setHover(nearest(...local(e)))}
+                  onPointerDown={(e) => setHover(nearest(...local(e)))}
+                  onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
+                  onClick={(e) => {
+                    // A dot selects its car; a click on empty space clears the selection.
+                    const hit = nearest(...local(e));
+                    setSelected(hit ? cars[hit.car].vin : null);
+                  }}
+                  style={{ cursor: hover ? "pointer" : "default" }}
+                >
+                  {chart.yTicks.map((t) => (
+                    <g key={`y${t.v}`}>
+                      <line x1={MARGIN.left} x2={width - MARGIN.right} y1={t.y} y2={t.y} className="stroke-line" />
+                      <text x={MARGIN.left - 8} y={t.y} dy="0.32em" textAnchor="end" className="fill-faint text-[11px] tabular-nums">
+                        {priceTickLabel(t.v)}
+                      </text>
+                    </g>
+                  ))}
+                  {chart.xTicks.map((t) => (
+                    <g key={`x${t.v}`}>
+                      <line x1={t.x} x2={t.x} y1={MARGIN.top} y2={HEIGHT - MARGIN.bottom} className="stroke-line" />
+                      <text x={t.x} y={HEIGHT - MARGIN.bottom + 18} textAnchor="middle" className="fill-faint text-[11px] tabular-nums">
+                        {t.label}
+                      </text>
+                    </g>
+                  ))}
+                  <text
+                    transform={`translate(12 ${MARGIN.top + (HEIGHT - MARGIN.top - MARGIN.bottom) / 2}) rotate(-90)`}
+                    textAnchor="middle"
+                    className="fill-faint text-[10px]"
+                  >
+                    Price (log scale)
+                  </text>
+
+                  {marks}
+
+                  {/* The hovered car's line comes forward so its other results are easy to find. */}
+                  {hovered && hovered.car.vin !== selected && <CarMarks car={hovered.car} xy={hovered.xy} emphasis="hovered" />}
+                  {hovered && (
+                    <circle
+                      cx={hovered.xy[hovered.event][0]}
+                      cy={hovered.xy[hovered.event][1]}
+                      r={R + 3}
+                      className="fill-none stroke-fg"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                </svg>
+              )}
+              {hovered && (
+                <Tooltip
+                  car={hovered.car}
+                  event={hovered.car.events[hovered.event]}
+                  x={hovered.xy[hovered.event][0]}
+                  y={hovered.xy[hovered.event][1]}
+                  width={width}
+                  selected={hovered.car.vin === selected}
+                />
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </section>
   );
@@ -293,8 +355,6 @@ function CarItem({
 }) {
   const latest = car.listings[0];
   const last = car.events.at(-1)!;
-  const sales = car.events.filter((e) => e.sold);
-  const change = sales.length >= 2 ? pctChange(sales.at(-1)!.price, sales[0].price) : null;
   return (
     <li ref={itemRef} className={selected ? "bg-surface-3/60" : undefined}>
       <button
@@ -316,7 +376,12 @@ function CarItem({
             <ResultMarker sold={last.sold} />
             {formatMoney(last.price)}
           </span>
-          {change != null && <Delta value={change} vs="since its first sale" className="text-xs" />}
+          {car.change != null && (
+            <span className="inline-flex items-center gap-1.5 text-xs">
+              <span className="text-muted">{formatMoneyChange(car.dollarChange!)}</span>
+              <Delta value={car.change} vs="since its first sale" />
+            </span>
+          )}
         </span>
       </button>
       {selected && <History car={car} />}
@@ -459,7 +524,16 @@ function repeatCars(auctions: FamilyAuction[]): Car[] {
       if (price == null || price <= 0) continue;
       events.push({ a, price, sold: isSold(a), isHighBid });
     }
-    if (events.length >= 2) cars.push({ vin, listings, events });
+    if (events.length < 2) continue;
+    const sales = events.filter((e) => e.sold);
+    const [first, last] = sales.length >= 2 ? [sales[0].price, sales.at(-1)!.price] : [null, null];
+    cars.push({
+      vin,
+      listings,
+      events,
+      change: pctChange(last, first),
+      dollarChange: first != null && last != null ? last - first : null,
+    });
   }
   return cars;
 }

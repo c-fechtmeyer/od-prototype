@@ -19,6 +19,11 @@ export function formatMoney(n: number | null): string {
   return `$${Math.round(n)}`;
 }
 
+// A signed change in compact dollars: +$2.3k, −$450.
+export function formatMoneyChange(n: number): string {
+  return `${n < 0 ? "−" : "+"}${formatMoney(Math.abs(n))}`;
+}
+
 // Exact dollars for individual results: $95,000.
 export function formatDollars(n: number | null): string {
   return n == null ? "—" : `$${Math.round(n).toLocaleString("en-US")}`;
