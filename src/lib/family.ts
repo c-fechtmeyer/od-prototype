@@ -8,6 +8,7 @@ import {
   type WindowKey,
   type WindowStats,
   emptyWindows,
+  getMarketSummary,
   getMarkets,
   toStats,
 } from "./markets";
@@ -83,6 +84,7 @@ export type FamilyPage = {
   nav: FamilyNav;
   generation: Generation | null; // set on a generation sub-page
   windows: Record<WindowKey, WindowStats>;
+  allWindows: Record<WindowKey, WindowStats>; // the same windows over every Cars & Bids auction, for "vs. all markets" comparisons
   auctions: FamilyAuction[]; // newest first
   asOf: number; // epoch ms the data was loaded, the "now" its time windows count back from
 };
@@ -156,7 +158,7 @@ export async function getFamilyPage(
   "use cache";
   cacheLife("hours");
 
-  const nav = await getFamilyNav(makeSlug, familySlug);
+  const [nav, summary] = await Promise.all([getFamilyNav(makeSlug, familySlug), getMarketSummary()]);
   if (!nav) return null;
   const generation = generationSlug != null ? nav.generations.find((g) => g.slug === generationSlug) : null;
   if (generation === undefined) return null;
@@ -221,6 +223,7 @@ export async function getFamilyPage(
     nav,
     generation,
     windows,
+    allWindows: summary.windows,
     auctions: auctionRows.map((r) => ({
       id: r.id,
       vin: r.vin,
