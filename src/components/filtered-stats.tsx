@@ -29,8 +29,18 @@ export function windowStats(auctions: FamilyAuction[]): WindowStats {
 }
 
 // A cut of the data under the scatter: last 365 days against the 365 before, for
-// whatever the filters currently select.
-export function FilteredStats({ auctions, filtered }: { auctions: FamilyAuction[]; filtered: boolean }) {
+// whatever the filters currently select. The rates are also set against the all-markets
+// baseline: the same rates over all Cars & Bids auctions in the last 365 days
+// (`allAuctions`), unfiltered.
+export function FilteredStats({
+  auctions,
+  filtered,
+  allAuctions,
+}: {
+  auctions: FamilyAuction[];
+  filtered: boolean;
+  allAuctions: WindowStats;
+}) {
   const cur = windowStats(auctions.filter((a) => a.yearWindow === 0));
   const prior = windowStats(auctions.filter((a) => a.yearWindow === 1));
 
@@ -79,6 +89,7 @@ export function FilteredStats({ auctions, filtered }: { auctions: FamilyAuction[
           delta={METRICS.noReserve.delta(cur, prior)}
           kind="pp"
           before={METRICS.noReserve.format(prior)}
+          all={METRICS.noReserve.format(allAuctions)}
         />
         <Stat
           label="Sell Through Rate"
@@ -86,6 +97,7 @@ export function FilteredStats({ auctions, filtered }: { auctions: FamilyAuction[
           delta={METRICS.sellThrough.delta(cur, prior)}
           kind="pp"
           before={METRICS.sellThrough.format(prior)}
+          all={METRICS.sellThrough.format(allAuctions)}
           note={`${formatCount(cur.soldAuctions)} of ${formatCount(cur.completedAuctions)} sold`}
         />
       </dl>
@@ -99,6 +111,7 @@ function Stat({
   delta,
   kind = "pct",
   before,
+  all,
   note,
 }: {
   label: string;
@@ -106,6 +119,7 @@ function Stat({
   delta: number | null;
   kind?: "pct" | "pp";
   before: string;
+  all?: string; // the all-markets baseline: the same metric over all Cars & Bids auctions
   note?: string;
 }) {
   return (
@@ -117,6 +131,9 @@ function Stat({
           <Delta value={delta} kind={kind} className="text-xs" />
         </Value>
         <span className="block text-[11px] text-faint tabular-nums">Yr earlier {before}</span>
+        {all && all !== INSUFFICIENT && (
+          <span className="block text-[11px] text-faint tabular-nums">vs. all markets {all}</span>
+        )}
       </dd>
     </div>
   );

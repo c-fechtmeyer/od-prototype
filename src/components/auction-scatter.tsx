@@ -17,6 +17,7 @@ import { isSold, resultPrice } from "@/lib/auction";
 import { type TrendPoint, logPriceTicks, loessTrend, priceTickLabel, timeTicks, trendAt } from "@/lib/chart";
 import type { FamilyAuction } from "@/lib/family";
 import { formatCount, formatDate, formatDollars, formatMoney } from "@/lib/format";
+import type { WindowStats } from "@/lib/markets";
 
 const HEIGHT = 380;
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 56 };
@@ -59,7 +60,16 @@ type Hover = { kind: "dot"; i: number } | { kind: "month"; t: number } | null;
 // filters above the plot fade out the auctions they exclude; the date range below
 // them sets the time axis, and only auctions inside it are plotted or counted. Trend
 // lines follow sold prices for all sales and, once a filter is set, for the selection.
-export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; asOf: number }) {
+// `allAuctions`: last-365-day stats over every Cars & Bids auction, for the stats strip.
+export function AuctionScatter({
+  auctions,
+  asOf,
+  allAuctions,
+}: {
+  auctions: FamilyAuction[];
+  asOf: number;
+  allAuctions: WindowStats;
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover>(null);
@@ -439,7 +449,9 @@ export function AuctionScatter({ auctions, asOf }: { auctions: FamilyAuction[]; 
           </TipBox>
         )}
       </div>
-      {auctions.length > 0 && <FilteredStats auctions={selected} filtered={isFiltered(filters)} />}
+      {auctions.length > 0 && (
+        <FilteredStats auctions={selected} filtered={isFiltered(filters)} allAuctions={allAuctions} />
+      )}
     </section>
   );
 }

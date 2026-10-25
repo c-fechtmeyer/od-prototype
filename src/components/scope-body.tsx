@@ -3,7 +3,7 @@ import { AuctionScatter } from "@/components/auction-scatter";
 import { PriceByColor } from "@/components/price-by-color";
 import { PriceDistribution } from "@/components/price-distribution";
 import { SameVinSales } from "@/components/same-vin-sales";
-import { FAMILY_TILES, KpiTiles } from "@/components/summary-tiles";
+import { KpiTiles, familyTiles } from "@/components/summary-tiles";
 import type { FamilyPage } from "@/lib/family";
 import { formatCount } from "@/lib/format";
 
@@ -26,10 +26,10 @@ export function ScopeBody({ data }: { data: FamilyPage }) {
         {since && ` since ${since}`}
       </p>
 
-      <KpiTiles label={`${scopeName} auctions`} tiles={FAMILY_TILES} windows={data.windows} />
+      <KpiTiles label={`${scopeName} auctions`} tiles={familyTiles(data.allWindows)} windows={data.windows} />
 
       <div className="mt-6">
-        <AuctionScatter auctions={auctions} asOf={data.asOf} />
+        <AuctionScatter auctions={auctions} asOf={data.asOf} allAuctions={data.allWindows.c365} />
       </div>
 
       {/* Last year's price picture: the distribution against the year before, and by color. */}

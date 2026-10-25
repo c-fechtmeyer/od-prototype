@@ -1,8 +1,8 @@
 import { Delta } from "@/components/delta";
 import { InfoTip } from "@/components/info-tip";
-import { INSUFFICIENT, formatCount, pctChange } from "@/lib/format";
+import { INSUFFICIENT, formatCount, formatPct, pctChange } from "@/lib/format";
 import type { MarketSummary, SummaryStats, WindowKey, WindowStats } from "@/lib/markets";
-import { METRICS } from "@/lib/metrics";
+import { METRICS, sellThroughRate } from "@/lib/metrics";
 
 type Tile<S extends WindowStats> = {
   key: string;
@@ -13,6 +13,9 @@ type Tile<S extends WindowStats> = {
   deltaKind: "pct" | "pp";
   context?: string; // right of the 365D value, e.g. "of 48 tracked"
   badge?: string; // a pill at the end of the 180D line, e.g. "+3 new"
+  // The all-markets baseline: the same metric over all Cars & Bids auctions, in grey
+  // beside each window's value.
+  baseline?: { c365?: string; c180?: string };
 };
 
 const PRICE_DEFINITION =
@@ -53,17 +56,29 @@ export function makeTiles(tracked: number, added: number): Tile<SummaryStats>[] 
   ];
 }
 
-// Model page: the same first three tiles, scoped to one family, plus sell-through.
-export const FAMILY_TILES: Tile<WindowStats>[] = [
-  { ...METRICS.auctions, definition: "Every listing of this model that ended in the window, including canceled auctions." },
-  { ...METRICS.volume, definition: "Total sale amount of this model's auctions that sold in the window, including sold-after deals." },
-  { ...METRICS.price, definition: PRICE_DEFINITION },
-  {
-    ...METRICS.sellThrough,
-    definition:
-      "Share of auctions that sold, including sold-after deals, out of all auctions that ran to the end (canceled auctions excluded). YoY is in percentage points.",
-  },
-];
+// A rate over every Cars & Bids auction in the window, or nothing if there's none to show.
+function vsAll(rate: number | null): string | undefined {
+  return rate == null ? undefined : `vs. all markets ${formatPct(rate)}`;
+}
+
+// Model page: the same first three tiles, scoped to one family, plus sell-through,
+// which is set against the all-markets baseline over the same windows (`all`).
+export function familyTiles(all: Record<WindowKey, WindowStats>): Tile<WindowStats>[] {
+  return [
+    { ...METRICS.auctions, definition: "Every listing of this model that ended in the window, including canceled auctions." },
+    { ...METRICS.volume, definition: "Total sale amount of this model's auctions that sold in the window, including sold-after deals." },
+    { ...METRICS.price, definition: PRICE_DEFINITION },
+    {
+      ...METRICS.sellThrough,
+      definition:
+        "Share of auctions that sold, including sold-after deals, out of all auctions that ran to the end (canceled auctions excluded). YoY is in percentage points. In grey, vs. all markets: the same rate over every Cars & Bids auction in the window.",
+      baseline: {
+        c365: vsAll(sellThroughRate(all.c365)),
+        c180: vsAll(sellThroughRate(all.c180)),
+      },
+    },
+  ];
+}
 
 // `tracked`: every family with any observed auction; `added`: the new ones among them.
 export function SummaryTiles({ summary, tracked, added }: { summary: MarketSummary; tracked: number; added: number }) {
@@ -112,6 +127,9 @@ export function KpiTiles<S extends WindowStats>({
                 </>
               )}
               {m.context && <span className="ml-auto text-xs whitespace-nowrap text-muted tabular-nums">{m.context}</span>}
+              {m.baseline?.c365 && (
+                <span className="ml-auto text-xs whitespace-nowrap text-faint tabular-nums">{m.baseline.c365}</span>
+              )}
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs whitespace-nowrap text-muted">
               <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-faint">
@@ -125,6 +143,7 @@ export function KpiTiles<S extends WindowStats>({
                   <Delta value={m.delta(c180, p180)} kind={m.deltaKind} />
                 </>
               )}
+              {m.baseline?.c180 && <span className="ml-auto text-faint tabular-nums">{m.baseline.c180}</span>}
               {m.badge && (
                 <span className="ml-auto rounded bg-forest-900 px-1.5 py-0.5 font-medium text-forest-300 tabular-nums">
                   {m.badge}
